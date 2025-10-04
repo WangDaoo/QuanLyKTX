@@ -1,0 +1,30 @@
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.AssemblyReference.cache
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.AssemblyInfoInputs.cache
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.AssemblyInfo.cs
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.CoreCompileInputs.cache
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.deps.json
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.dll
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.pdb
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\bin\Debug\net8.0\Model.dll
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\bin\Debug\net8.0\Model.pdb
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.Up2Date
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.dll
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\refint\DAL.dll
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.pdb
+C:\Users\Windows\Downloads\QuanLyKTX\DAL\obj\Debug\net8.0\ref\DAL.dll
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.deps.json
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.dll
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\bin\Debug\net8.0\DAL.pdb
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\bin\Debug\net8.0\Model.dll
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\bin\Debug\net8.0\Model.pdb
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.AssemblyReference.cache
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.GeneratedMSBuildEditorConfig.editorconfig
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.AssemblyInfoInputs.cache
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.AssemblyInfo.cs
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.CoreCompileInputs.cache
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.csproj.Up2Date
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.dll
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\refint\DAL.dll
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\DAL.pdb
+E:\Năm 3\Phát triển phần mềm hướng dịch vụ (Quang, Đại, Nguyệt)\Quản Lý Ký Túc Xá\QuanLyKTX\QuanLyKTX\DAL\obj\Debug\net8.0\ref\DAL.dll
