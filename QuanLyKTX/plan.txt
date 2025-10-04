@@ -1,0 +1,32 @@
+STT	Công việc	Người chịu trách nhiệm chính	Ước lượng thời gian	Deadline	Minh chứng
+A	SPRINT 0 - PHÂN TÍCH & THIẾT KẾ			
+1	Khảo sát yêu cầu + viết SRS	Nguyệt	3 ngày	Tuần 1	File SRS.docx
+1.1	Xác định Actor & Use Case	Nguyệt	1 ngày	Tuần 1	Use Case Diagram
+1.2	Thiết kế kiến trúc + chia module	Đại	2 ngày	Tuần 1	Architecture Diagram
+B	SPRINT 1 - DATABASE & API CƠ SỞ			
+2	Thiết kế CSDL (ToaNha, Phong, Giuong, Sinh)	Đại	2 ngày	Tuần 2	Database Schema
+2.1	Tạo script/migration theo file SQL	Quang	1 ngày	Tuần 2	SQL Scripts
+2.2	Viết seed data mẫu (Admin/User, Tòa, Phòng)	Đại	1 ngày	Tuần 2	Seed Data SQL
+2.3	API Auth (login, register)	Quang	2 ngày	Tuần 2	AuthController.cs
+C	SPRINT 2 - BACKEND MODULES			
+3	API Toà nhà (sp_toanha_*)	Đại	2 ngày	Tuần 3	ToaNhaController.cs
+3.1	API Phòng (sp_phong_*)	Quang	2 ngày	Tuần 3	PhongController.cs
+3.2	API Giường (sp_giuong_*)	Nguyệt	2 ngày	Tuần 3	GiuongController.cs
+3.3	API Sinh viên (sp_sinhvien_*, search/paging)	Đại	3 ngày	Tuần 3	SinhVienController.cs
+3.4	API Hợp đồng (sp_hopdong_*)	Quang	2 ngày	Tuần 4	HopDongController.cs
+3.5	API Hóa đơn (sp_hoadon_*)	Nguyệt	2 ngày	Tuần 4	HoaDonController.cs
+3.6	API Báo cáo cơ bản	Đại	2 ngày	Tuần 4	ReportController.cs
+D	SPRINT 3 - FRONTEND CƠ SỞ			
+4	Giao diện đăng nhập/đăng xuất	Nguyệt	2 ngày	Tuần 5	Login/Logout UI
+4.1	Layout, Navbar, phân quyền menu	Quang	3 ngày	Tuần 5	Main Layout Component
+4.2	Dashboard tổng quan (phòng, SV, hợp đồng)	Đại	3 ngày	Tuần 5	Dashboard Component
+E	SPRINT 4 - FRONTEND MODULE			
+5	UI Quản lý Toà nhà, Phòng, Giường	Đại	4 ngày	Tuần 6	Building/Room/Bed Management
+5.1	UI Quản lý Sinh viên	Nguyệt	4 ngày	Tuần 6	Student Management
+5.2	UI Quản lý Hợp đồng & Thanh toán	Quang	4 ngày	Tuần 6	Contract/Payment Management
+5.3	UI Quản lý Tài khoản	Đại	2 ngày	Tuần 7	Account Management
+F	SPRINT 5 - TÍCH HỢP & HOÀN THIỆN			
+6	Tích hợp API → Frontend	Nguyệt	3 ngày	Tuần 7	API Integration
+6.1	Viết test case API + UI	Quang	2 ngày	Tuần 7	Test Cases
+6.2	Fix bug + tối ưu	Đại	2 ngày	Tuần 8	Bug Fixes
+6.3	Viết báo cáo + Demo hệ thống	Nguyệt	2 ngày	Tuần 8	Final Report & Demo
