@@ -1,0 +1,22 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "KTX-Gateway\\KTX-Gateway\\KTX-Gateway.csproj",
+        "Action": "Start",
+        "DebugTarget": "KTX-Gateway"
+      },
+      {
+        "Path": "KTX-Admin\\KTX-Admin\\KTX-Admin.csproj",
+        "Action": "Start",
+        "DebugTarget": "KTX-Admin"
+      },
+      {
+        "Path": "KTX-NguoiDung\\KTX-NguoiDung\\KTX-NguoiDung.csproj",
+        "Action": "Start",
+        "DebugTarget": "KTX-NguoiDung"
+      }
+    ]
+  }
+]

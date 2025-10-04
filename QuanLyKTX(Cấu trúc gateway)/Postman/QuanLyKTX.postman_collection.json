@@ -1,0 +1,154 @@
+{
+  "info": {
+    "name": "QuanLyKTX - Gateway 8000 / Admin 8001 / User 8002",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Bộ Postman cho hệ thống Quản Lý KTX qua Gateway và trực tiếp Admin/User. Bao gồm test tự động và lưu JWT."
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Gateway) - POST /auth/token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/token",
+              "host": [ "{{gateway}}" ],
+              "path": [ "auth", "token" ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin@123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.expect(json.token).to.be.a('string');",
+                  "pm.collectionVariables.set('token', json.token);",
+                  "pm.environment.set('token', json.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin - Buildings",
+      "item": [
+        {
+          "name": "List Buildings",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{gateway}}/admin/api/buildings", "host": ["{{gateway}}"], "path": ["admin","api","buildings"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status 200',()=>pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Create Building",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{gateway}}/admin/api/buildings", "host": ["{{gateway}}"], "path": ["admin","api","buildings"] },
+            "body": { "mode": "raw", "raw": "{\n  \"tenToaNha\": \"Tòa A\",\n  \"diaChi\": \"CS1\",\n  \"soTang\": 5,\n  \"trangThai\": true\n}" }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Created/OK',()=>pm.expect([200,201]).to.include(pm.response.code));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Admin - Rooms",
+      "item": [
+        {
+          "name": "List Rooms",
+          "request": {"method":"GET","header":[{"key":"Authorization","value":"Bearer {{token}}"}],"url":{"raw":"{{gateway}}/admin/api/rooms","host":["{{gateway}}"],"path":["admin","api","rooms"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status 200',()=>pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Create Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key":"Authorization","value":"Bearer {{token}}"},
+              {"key":"Content-Type","value":"application/json"}
+            ],
+            "url": {"raw":"{{gateway}}/admin/api/rooms","host":["{{gateway}}"],"path":["admin","api","rooms"]},
+            "body": {"mode":"raw","raw":"{\n  \"tenPhong\": \"A101\",\n  \"maToaNha\": 1,\n  \"soGiuong\": 4,\n  \"loaiPhong\": \"Phòng 4\",\n  \"trangThai\": \"Trống\"\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Meter Readings",
+      "item": [
+        {
+          "name": "List Readings",
+          "request": {"method":"GET","header":[{"key":"Authorization","value":"Bearer {{token}}"}],"url":{"raw":"{{gateway}}/admin/api/meter-readings","host":["{{gateway}}"],"path":["admin","api","meter-readings"]}}
+        },
+        {
+          "name": "Create Reading",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key":"Authorization","value":"Bearer {{token}}"},
+              {"key":"Content-Type","value":"application/json"}
+            ],
+            "url": {"raw":"{{gateway}}/admin/api/meter-readings","host":["{{gateway}}"],"path":["admin","api","meter-readings"]},
+            "body": {"mode":"raw","raw":"{\n  \"maPhong\": 1,\n  \"thang\": 9,\n  \"nam\": 2025,\n  \"chiSoDien\": 100,\n  \"chiSoNuoc\": 50\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Bills",
+      "item": [
+        {
+          "name": "List Bills",
+          "request": {"method":"GET","header":[{"key":"Authorization","value":"Bearer {{token}}"}],"url":{"raw":"{{gateway}}/admin/api/bills","host":["{{gateway}}"],"path":["admin","api","bills"]}}
+        },
+        {
+          "name": "Calculate Monthly",
+          "request": {
+            "method": "POST",
+            "header": [ {"key":"Authorization","value":"Bearer {{token}}"}, {"key":"Content-Type","value":"application/json"} ],
+            "url": {"raw":"{{gateway}}/admin/api/bills/calculate-monthly","host":["{{gateway}}"],"path":["admin","api","bills","calculate-monthly"]},
+            "body": {"mode":"raw","raw":"{\n  \"thang\": 9,\n  \"nam\": 2025\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "User - My Bills",
+      "item": [
+        {
+          "name": "List My Bills",
+          "request": {"method":"GET","header":[{"key":"Authorization","value":"Bearer {{token}}"}],"url":{"raw":"{{gateway}}/user/api/bills/my-bills","host":["{{gateway}}"],"path":["user","api","bills","my-bills"]}}
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "gateway", "value": "http://localhost:8000" },
+    { "key": "admin", "value": "http://localhost:8001" },
+    { "key": "user", "value": "http://localhost:8002" },
+    { "key": "token", "value": "" }
+  ]
+}
+
+
