@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_Admin.Models;
+using KTX_NguoiDung.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace KTX_Admin.Controllers
+namespace KTX_NguoiDung.Controllers
 {
     [ApiController]
-    [Route("api/receipts")]
-[Authorize(Roles = "Admin,Officer")]
+    [Route("api/receipts")] 
+    [Authorize(Roles = "Student")]
     public class ReceiptsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -18,146 +18,97 @@ namespace KTX_Admin.Controllers
             _connectionString = configuration.GetConnectionString("KTX") ?? throw new ArgumentNullException(nameof(configuration));
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
+        [HttpGet("my")]
+        public async Task<IActionResult> My()
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null)
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-                using var command = new SqlCommand("sp_BienLaiThu_GetAll", connection) { CommandType = CommandType.StoredProcedure };
+
+                using var command = new SqlCommand("sp_BienLaiThu_GetBySinhVien", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
+
                 using var reader = await command.ExecuteReaderAsync();
-                var items = new List<BienLaiThu>();
+                var receipts = new List<BienLaiThu>();
+
                 while (await reader.ReadAsync())
                 {
-                    items.Add(new BienLaiThu
+                    receipts.Add(new BienLaiThu
                     {
                         MaBienLai = reader.GetInt32("MaBienLai"),
                         MaHoaDon = reader.GetInt32("MaHoaDon"),
                         SoTienThu = reader.GetDecimal("SoTienThu"),
                         NgayThu = reader.GetDateTime("NgayThu"),
                         PhuongThucThanhToan = reader.GetString("PhuongThucThanhToan"),
-                        NguoiThu = reader.GetString("NguoiThu"),
+                        NguoiThu = reader.IsDBNull("NguoiThu") ? null : reader.GetString("NguoiThu"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
-                return Ok(items);
+
+                return Ok(new { success = true, data = receipts });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
+        private (int? studentId, string? errorMessage) GetCurrentStudentId()
         {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_BienLaiThu_GetById", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaBienLai", id);
-                using var reader = await command.ExecuteReaderAsync();
-                if (await reader.ReadAsync())
-                {
-                    var item = new BienLaiThu
-                    {
-                        MaBienLai = reader.GetInt32("MaBienLai"),
-                        MaHoaDon = reader.GetInt32("MaHoaDon"),
-                        SoTienThu = reader.GetDecimal("SoTienThu"),
-                        NgayThu = reader.GetDateTime("NgayThu"),
-                        PhuongThucThanhToan = reader.GetString("PhuongThucThanhToan"),
-                        NguoiThu = reader.GetString("NguoiThu"),
-                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted"),
-                        NgayTao = reader.GetDateTime("NgayTao"),
-                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
-                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
-                    };
-                    return Ok(item);
-                }
-                return NotFound();
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
+            var userId = User.FindFirst("MaTaiKhoan")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] BienLaiThu model)
-        {
             try
             {
                 using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_BienLaiThu_Insert", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon);
-                command.Parameters.AddWithValue("@SoTienThu", model.SoTienThu);
-                command.Parameters.AddWithValue("@NgayThu", model.NgayThu);
-                command.Parameters.AddWithValue("@PhuongThucThanhToan", model.PhuongThucThanhToan);
-                command.Parameters.AddWithValue("@NguoiThu", model.NguoiThu);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
-                var newId = await command.ExecuteScalarAsync();
-                model.MaBienLai = Convert.ToInt32(newId);
-                return CreatedAtAction(nameof(GetById), new { id = model.MaBienLai }, model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
+                connection.Open();
 
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] BienLaiThu model)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_BienLaiThu_Update", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaBienLai", id);
-                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon);
-                command.Parameters.AddWithValue("@SoTienThu", model.SoTienThu);
-                command.Parameters.AddWithValue("@NgayThu", model.NgayThu);
-                command.Parameters.AddWithValue("@PhuongThucThanhToan", model.PhuongThucThanhToan);
-                command.Parameters.AddWithValue("@NguoiThu", model.NguoiThu);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)model.NguoiCapNhat ?? DBNull.Value);
-                var rows = await command.ExecuteNonQueryAsync();
-                if (rows == 0) return NotFound();
-            return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
+                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
+                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
+                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
 
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_BienLaiThu_Delete", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaBienLai", id);
-                var rows = await command.ExecuteNonQueryAsync();
-                if (rows == 0) return NotFound();
-                return Ok();
+                using var reader = command.ExecuteReader();
+                if (!reader.Read())
+                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
+                
+                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
+                if (vaiTro != "Student")
+                    return (null, "Tài khoản không phải là sinh viên");
+                
+                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
+                
+                if (maSinhVien == null)
+                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
+                
+                reader.Close();
+                
+                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
+                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
+                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
+                var isValid = validateCommand.ExecuteScalar();
+                
+                if (isValid == null)
+                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
+                
+                return (maSinhVien.Value, null);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return (null, $"Lỗi hệ thống: {ex.Message}");
             }
         }
     }

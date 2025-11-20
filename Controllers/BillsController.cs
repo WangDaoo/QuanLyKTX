@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_Admin.Models;
+using KTX_NguoiDung.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace KTX_Admin.Controllers
+namespace KTX_NguoiDung.Controllers
 {
     [ApiController]
     [Route("api/bills")]
-    [Authorize(Roles = "Admin,Officer")]
+    [Authorize(Roles = "Student")]
     public class BillsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -18,170 +18,153 @@ namespace KTX_Admin.Controllers
             _connectionString = configuration.GetConnectionString("KTX") ?? throw new ArgumentNullException(nameof(configuration));
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
+        [HttpGet("my")]
+        public async Task<IActionResult> My()
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null) 
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_HoaDon_GetAll", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_HoaDon_GetBySinhVien", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
 
                 using var reader = await command.ExecuteReaderAsync();
                 var bills = new List<HoaDon>();
-
                 while (await reader.ReadAsync())
                 {
                     bills.Add(new HoaDon
                     {
                         MaHoaDon = reader.GetInt32("MaHoaDon"),
-                        MaSinhVien = reader.IsDBNull("MaSinhVien") ? null : reader.GetInt32("MaSinhVien"),
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
                         MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
                         MaHopDong = reader.IsDBNull("MaHopDong") ? null : reader.GetInt32("MaHopDong"),
                         Thang = reader.GetInt32("Thang"),
                         Nam = reader.GetInt32("Nam"),
                         TongTien = reader.GetDecimal("TongTien"),
                         TrangThai = reader.GetString("TrangThai"),
-                        NgayTao = reader.GetDateTime("NgayTao"),
-                        NgayHetHan = reader.IsDBNull("NgayHetHan") ? null : reader.GetDateTime("NgayHetHan"),
-                        NgayThanhToan = reader.IsDBNull("NgayThanhToan") ? null : reader.GetDateTime("NgayThanhToan"),
+                        HanThanhToan = reader.IsDBNull("HanThanhToan") ? (DateTime?)null : reader.GetDateTime("HanThanhToan"),
+                        NgayThanhToan = reader.IsDBNull("NgayThanhToan") ? (DateTime?)null : reader.GetDateTime("NgayThanhToan"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted")
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
-
-                return Ok(bills);
+                return Ok(new { success = true, data = bills });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] HoaDon model)
+        [HttpGet("my/{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null)
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_HoaDon_Insert", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaSinhVien", (object?)model.MaSinhVien ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MaPhong", (object?)model.MaPhong ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MaHopDong", (object?)model.MaHopDong ?? DBNull.Value);
-                command.Parameters.AddWithValue("@Thang", model.Thang);
-                command.Parameters.AddWithValue("@Nam", model.Nam);
-                command.Parameters.AddWithValue("@TongTien", model.TongTien);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@NgayHetHan", (object?)model.NgayHetHan ?? DBNull.Value);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-
-                var newId = await command.ExecuteScalarAsync();
-                model.MaHoaDon = Convert.ToInt32(newId);
-
-                return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] HoaDon model)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_HoaDon_Update", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaHoaDon", id);
-                command.Parameters.AddWithValue("@MaSinhVien", (object?)model.MaSinhVien ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MaPhong", (object?)model.MaPhong ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MaHopDong", (object?)model.MaHopDong ?? DBNull.Value);
-                command.Parameters.AddWithValue("@Thang", model.Thang);
-                command.Parameters.AddWithValue("@Nam", model.Nam);
-                command.Parameters.AddWithValue("@TongTien", model.TongTien);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@NgayHetHan", (object?)model.NgayHetHan ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NgayThanhToan", (object?)model.NgayThanhToan ?? DBNull.Value);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
-
-                return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_HoaDon_Delete", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_HoaDon_GetById", connection) { CommandType = CommandType.StoredProcedure };
                 command.Parameters.AddWithValue("@MaHoaDon", id);
 
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
+                using var reader = await command.ExecuteReaderAsync();
+                
+                if (await reader.ReadAsync())
+                {
+                    var bill = new HoaDon
+                    {
+                        MaHoaDon = reader.GetInt32("MaHoaDon"),
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
+                        MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
+                        MaHopDong = reader.IsDBNull("MaHopDong") ? null : reader.GetInt32("MaHopDong"),
+                        Thang = reader.GetInt32("Thang"),
+                        Nam = reader.GetInt32("Nam"),
+                        TongTien = reader.GetDecimal("TongTien"),
+                        TrangThai = reader.GetString("TrangThai"),
+                        HanThanhToan = reader.IsDBNull("HanThanhToan") ? (DateTime?)null : reader.GetDateTime("HanThanhToan"),
+                        NgayThanhToan = reader.IsDBNull("NgayThanhToan") ? (DateTime?)null : reader.GetDateTime("NgayThanhToan"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    };
 
-                return Ok();
+                    // Kiểm tra xem hóa đơn có thuộc về sinh viên hiện tại không
+                    if (bill.MaSinhVien != maSinhVien)
+                    {
+                        return Forbid();
+                    }
+
+                    return Ok(new { success = true, data = bill });
+                }
+
+                return NotFound(new { success = false, message = "Không tìm thấy hóa đơn" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpPost("generate-monthly")]
-        public async Task<IActionResult> GenerateMonthly([FromQuery] int thang, [FromQuery] int nam)
+        private (int? studentId, string? errorMessage) GetCurrentStudentId()
         {
+            var userId = User.FindFirst("MaTaiKhoan")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
+
             try
             {
                 using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
+                connection.Open();
 
-                using var command = new SqlCommand("sp_HoaDon_GenerateMonthly", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@Thang", thang);
-                command.Parameters.AddWithValue("@Nam", nam);
+                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
+                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
+                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
 
-                var result = await command.ExecuteScalarAsync();
-                var generated = Convert.ToInt32(result);
-
-                return Ok(new { generated });
+                using var reader = command.ExecuteReader();
+                if (!reader.Read())
+                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
+                
+                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
+                if (vaiTro != "Student")
+                    return (null, "Tài khoản không phải là sinh viên");
+                
+                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
+                
+                if (maSinhVien == null)
+                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
+                
+                reader.Close();
+                
+                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
+                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
+                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
+                var isValid = validateCommand.ExecuteScalar();
+                
+                if (isValid == null)
+                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
+                
+                return (maSinhVien.Value, null);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return (null, $"Lỗi hệ thống: {ex.Message}");
             }
         }
     }
 }
+
 

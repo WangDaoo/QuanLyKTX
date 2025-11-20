@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_Admin.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using KTX_NguoiDung.Models;
 
-namespace KTX_Admin.Controllers
+namespace KTX_NguoiDung.Controllers
 {
     [ApiController]
     [Route("api/fees")]
-    [Authorize(Roles = "Admin,Officer")]
+    [Authorize(Roles = "Student")]
     public class FeesController : ControllerBase
     {
         private readonly string _connectionString;
@@ -26,38 +26,36 @@ namespace KTX_Admin.Controllers
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_MucPhi_GetAll", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_MucPhi_GetAll", connection);
+                command.CommandType = CommandType.StoredProcedure;
 
                 using var reader = await command.ExecuteReaderAsync();
-                var fees = new List<MucPhi>();
-
+                var fees = new List<object>();
+                
                 while (await reader.ReadAsync())
                 {
-                    fees.Add(new MucPhi
+                    fees.Add(new
                     {
                         MaMucPhi = reader.GetInt32("MaMucPhi"),
                         TenMucPhi = reader.GetString("TenMucPhi"),
                         LoaiPhi = reader.GetString("LoaiPhi"),
                         GiaTien = reader.GetDecimal("GiaTien"),
-                        DonVi = reader.GetString("DonVi"),
+                        DonVi = reader.IsDBNull("DonVi") ? null : reader.GetString("DonVi"),
                         TrangThai = reader.GetBoolean("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
 
-                return Ok(fees);
+                return Ok(new { success = true, data = fees });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -69,131 +67,80 @@ namespace KTX_Admin.Controllers
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_MucPhi_GetById", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_MucPhi_GetById", connection);
+                command.CommandType = CommandType.StoredProcedure;
                 command.Parameters.AddWithValue("@MaMucPhi", id);
 
                 using var reader = await command.ExecuteReaderAsync();
+                
                 if (await reader.ReadAsync())
                 {
-                    var fee = new MucPhi
+                    var fee = new
                     {
                         MaMucPhi = reader.GetInt32("MaMucPhi"),
                         TenMucPhi = reader.GetString("TenMucPhi"),
                         LoaiPhi = reader.GetString("LoaiPhi"),
                         GiaTien = reader.GetDecimal("GiaTien"),
-                        DonVi = reader.GetString("DonVi"),
+                        DonVi = reader.IsDBNull("DonVi") ? null : reader.GetString("DonVi"),
                         TrangThai = reader.GetBoolean("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     };
-                    return Ok(fee);
+                    return Ok(new { success = true, data = fee });
                 }
 
-                return NotFound();
+                return NotFound(new { success = false, message = "Không tìm thấy mức phí" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] MucPhi model)
+        [HttpGet("by-type/{loaiPhi}")]
+        public async Task<IActionResult> GetByType(string loaiPhi)
         {
             try
             {
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_MucPhi_Insert", connection)
+                using var command = new SqlCommand("sp_MucPhi_GetByType", connection);
+                command.CommandType = CommandType.StoredProcedure;
+                command.Parameters.AddWithValue("@LoaiPhi", loaiPhi);
+
+                using var reader = await command.ExecuteReaderAsync();
+                var fees = new List<object>();
+                
+                while (await reader.ReadAsync())
                 {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@TenMucPhi", model.TenMucPhi);
-                command.Parameters.AddWithValue("@LoaiPhi", model.LoaiPhi);
-                command.Parameters.AddWithValue("@GiaTien", model.GiaTien);
-                command.Parameters.AddWithValue("@DonVi", model.DonVi);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
+                    fees.Add(new
+                    {
+                        MaMucPhi = reader.GetInt32("MaMucPhi"),
+                        TenMucPhi = reader.GetString("TenMucPhi"),
+                        LoaiPhi = reader.GetString("LoaiPhi"),
+                        GiaTien = reader.GetDecimal("GiaTien"),
+                        DonVi = reader.IsDBNull("DonVi") ? null : reader.GetString("DonVi"),
+                        TrangThai = reader.GetBoolean("TrangThai"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    });
+                }
 
-                var newId = await command.ExecuteScalarAsync();
-                model.MaMucPhi = Convert.ToInt32(newId);
-
-                return CreatedAtAction(nameof(GetById), new { id = model.MaMucPhi }, model);
+                return Ok(new { success = true, data = fees });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] MucPhi model)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_MucPhi_Update", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaMucPhi", id);
-                command.Parameters.AddWithValue("@TenMucPhi", model.TenMucPhi);
-                command.Parameters.AddWithValue("@LoaiPhi", model.LoaiPhi);
-                command.Parameters.AddWithValue("@GiaTien", model.GiaTien);
-                command.Parameters.AddWithValue("@DonVi", model.DonVi);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)model.NguoiCapNhat ?? DBNull.Value);
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
-
-            return Ok(model);
-        }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_MucPhi_Delete", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaMucPhi", id);
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
-
-            return Ok();
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
 }
-
-

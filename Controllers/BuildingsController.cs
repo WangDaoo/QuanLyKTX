@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_Admin.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using KTX_NguoiDung.Models;
 
-namespace KTX_Admin.Controllers
+namespace KTX_NguoiDung.Controllers
 {
     [ApiController]
     [Route("api/buildings")]
-    [Authorize(Roles = "Admin,Officer")]
+    [Authorize(Roles = "Student")]
     public class BuildingsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -26,37 +26,35 @@ namespace KTX_Admin.Controllers
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_ToaNha_GetAll", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_ToaNha_GetAll", connection);
+                command.CommandType = CommandType.StoredProcedure;
 
                 using var reader = await command.ExecuteReaderAsync();
-                var buildings = new List<ToaNha>();
-
+                var buildings = new List<object>();
+                
                 while (await reader.ReadAsync())
                 {
-                    buildings.Add(new ToaNha
+                    buildings.Add(new
                     {
                         MaToaNha = reader.GetInt32("MaToaNha"),
                         TenToaNha = reader.GetString("TenToaNha"),
                         DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
-                        SoTang = reader.IsDBNull("SoTang") ? null : reader.GetInt32("SoTang"),
+                        SoTang = reader.IsDBNull("SoTang") ? (int?)null : reader.GetInt32("SoTang"),
                         MoTa = reader.IsDBNull("MoTa") ? null : reader.GetString("MoTa"),
                         TrangThai = reader.GetBoolean("TrangThai"),
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
 
-                return Ok(buildings);
+                return Ok(new { success = true, data = buildings });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -68,123 +66,37 @@ namespace KTX_Admin.Controllers
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_ToaNha_GetById", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
+                using var command = new SqlCommand("sp_ToaNha_GetById", connection);
+                command.CommandType = CommandType.StoredProcedure;
                 command.Parameters.AddWithValue("@MaToaNha", id);
 
                 using var reader = await command.ExecuteReaderAsync();
+                
                 if (await reader.ReadAsync())
                 {
-                    var building = new ToaNha
+                    var building = new
                     {
                         MaToaNha = reader.GetInt32("MaToaNha"),
                         TenToaNha = reader.GetString("TenToaNha"),
                         DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
-                        SoTang = reader.IsDBNull("SoTang") ? null : reader.GetInt32("SoTang"),
+                        SoTang = reader.IsDBNull("SoTang") ? (int?)null : reader.GetInt32("SoTang"),
                         MoTa = reader.IsDBNull("MoTa") ? null : reader.GetString("MoTa"),
                         TrangThai = reader.GetBoolean("TrangThai"),
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     };
-                    return Ok(building);
+                    return Ok(new { success = true, data = building });
                 }
 
-                return NotFound();
+                return NotFound(new { success = false, message = "Không tìm thấy tòa nhà" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] ToaNha model)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_ToaNha_Insert", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@TenToaNha", model.TenToaNha);
-                command.Parameters.AddWithValue("@DiaChi", (object?)model.DiaChi ?? DBNull.Value);
-                command.Parameters.AddWithValue("@SoTang", (object?)model.SoTang ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MoTa", (object?)model.MoTa ?? DBNull.Value);
-
-                var newId = await command.ExecuteScalarAsync();
-                model.MaToaNha = Convert.ToInt32(newId);
-
-                return CreatedAtAction(nameof(GetById), new { id = model.MaToaNha }, model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] ToaNha model)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_ToaNha_Update", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaToaNha", id);
-                command.Parameters.AddWithValue("@TenToaNha", model.TenToaNha);
-                command.Parameters.AddWithValue("@DiaChi", (object?)model.DiaChi ?? DBNull.Value);
-                command.Parameters.AddWithValue("@SoTang", (object?)model.SoTang ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MoTa", (object?)model.MoTa ?? DBNull.Value);
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
-
-                return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_ToaNha_Delete", connection)
-                {
-                    CommandType = CommandType.StoredProcedure
-                };
-                command.Parameters.AddWithValue("@MaToaNha", id);
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0)
-                    return NotFound();
-
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
 }
-

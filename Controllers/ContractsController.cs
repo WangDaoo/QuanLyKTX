@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_Admin.Models;
+using KTX_NguoiDung.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Security.Claims;
 
-namespace KTX_Admin.Controllers
+namespace KTX_NguoiDung.Controllers
 {
     [ApiController]
     [Route("api/contracts")]
-    [Authorize(Roles = "Admin,Officer")]
+    [Authorize(Roles = "Student")]
     public class ContractsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -18,19 +19,26 @@ namespace KTX_Admin.Controllers
             _connectionString = configuration.GetConnectionString("KTX") ?? throw new ArgumentNullException(nameof(configuration));
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
+        [HttpGet("my")]
+        public async Task<IActionResult> My()
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null)
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-                using var command = new SqlCommand("sp_HopDong_GetAll", connection) { CommandType = CommandType.StoredProcedure };
+
+                using var command = new SqlCommand("sp_HopDong_GetBySinhVien", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
+
                 using var reader = await command.ExecuteReaderAsync();
-                var items = new List<HopDong>();
+                var contracts = new List<HopDong>();
                 while (await reader.ReadAsync())
                 {
-                    items.Add(new HopDong
+                    contracts.Add(new HopDong
                     {
                         MaHopDong = reader.GetInt32("MaHopDong"),
                         MaSinhVien = reader.GetInt32("MaSinhVien"),
@@ -43,125 +51,222 @@ namespace KTX_Admin.Controllers
                         IsDeleted = reader.GetBoolean("IsDeleted"),
                         NgayTao = reader.GetDateTime("NgayTao"),
                         NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
                         NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
-                return Ok(items);
+                return Ok(new { success = true, data = contracts });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
+        [HttpGet("my/current")]
+        public async Task<IActionResult> GetCurrent()
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null)
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-                using var command = new SqlCommand("sp_HopDong_GetById", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaHopDong", id);
+
+                using var command = new SqlCommand("sp_HopDong_GetBySinhVien", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
+
                 using var reader = await command.ExecuteReaderAsync();
-                if (await reader.ReadAsync())
+                var today = DateTime.Now.Date;
+                
+                while (await reader.ReadAsync())
                 {
-                    var item = new HopDong
+                    var ngayBatDau = reader.GetDateTime("NgayBatDau").Date;
+                    var ngayKetThuc = reader.GetDateTime("NgayKetThuc").Date;
+                    var trangThai = reader.GetString("TrangThai");
+                    
+                    // Kiểm tra hợp đồng có hiệu lực: TrangThai = "Có hiệu lực" và ngày hiện tại nằm trong khoảng
+                    if (trangThai == "Có hiệu lực" && today >= ngayBatDau && today <= ngayKetThuc)
                     {
-                        MaHopDong = reader.GetInt32("MaHopDong"),
-                        MaSinhVien = reader.GetInt32("MaSinhVien"),
-                        MaGiuong = reader.GetInt32("MaGiuong"),
-                        NgayBatDau = reader.GetDateTime("NgayBatDau"),
-                        NgayKetThuc = reader.GetDateTime("NgayKetThuc"),
-                        GiaPhong = reader.GetDecimal("GiaPhong"),
-                        TrangThai = reader.GetString("TrangThai"),
-                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted"),
-                        NgayTao = reader.GetDateTime("NgayTao"),
-                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
-                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? null : reader.GetDateTime("NgayCapNhat"),
-                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
-                    };
-                    return Ok(item);
+                        var contract = new HopDong
+                        {
+                            MaHopDong = reader.GetInt32("MaHopDong"),
+                            MaSinhVien = reader.GetInt32("MaSinhVien"),
+                            MaGiuong = reader.GetInt32("MaGiuong"),
+                            NgayBatDau = reader.GetDateTime("NgayBatDau"),
+                            NgayKetThuc = reader.GetDateTime("NgayKetThuc"),
+                            GiaPhong = reader.GetDecimal("GiaPhong"),
+                            TrangThai = reader.GetString("TrangThai"),
+                            GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                            IsDeleted = reader.GetBoolean("IsDeleted"),
+                            NgayTao = reader.GetDateTime("NgayTao"),
+                            NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                            NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                            NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                        };
+                        return Ok(new { success = true, data = contract });
+                    }
                 }
-                return NotFound();
+                
+                return NotFound(new { success = false, message = "Không tìm thấy hợp đồng hiện tại" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] HopDong model)
+        [HttpPut("my/{id:int}/confirm")]
+        public async Task<IActionResult> ConfirmContract(int id)
         {
             try
             {
+                var (maSinhVien, errorMessage) = GetCurrentStudentId();
+                if (maSinhVien == null)
+                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
+
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-                using var command = new SqlCommand("sp_HopDong_Insert", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
-                command.Parameters.AddWithValue("@MaGiuong", model.MaGiuong);
-                command.Parameters.AddWithValue("@NgayBatDau", model.NgayBatDau);
-                command.Parameters.AddWithValue("@NgayKetThuc", model.NgayKetThuc);
-                command.Parameters.AddWithValue("@GiaPhong", model.GiaPhong);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
-                var newId = await command.ExecuteScalarAsync();
-                model.MaHopDong = Convert.ToInt32(newId);
-                return CreatedAtAction(nameof(GetById), new { id = model.MaHopDong }, model);
+
+                // Kiểm tra hợp đồng có thuộc về sinh viên này không và đang ở trạng thái "Chờ duyệt"
+                using var checkCommand = new SqlCommand("SELECT MaHopDong, TrangThai FROM HopDong WHERE MaHopDong = @MaHopDong AND MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
+                checkCommand.Parameters.AddWithValue("@MaHopDong", id);
+                checkCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
+
+                using var checkReader = await checkCommand.ExecuteReaderAsync();
+                if (!await checkReader.ReadAsync())
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy hợp đồng hoặc hợp đồng không thuộc về bạn" });
+                }
+
+                var currentStatus = checkReader.GetString("TrangThai");
+                if (currentStatus != "Chờ duyệt")
+                {
+                    return BadRequest(new { success = false, message = $"Hợp đồng đã ở trạng thái '{currentStatus}', không thể xác nhận" });
+                }
+
+                checkReader.Close();
+
+                // Cập nhật trạng thái hợp đồng thành "Đã xác nhận" (sinh viên đã ký)
+                // Nhân viên sẽ duyệt sau để chuyển sang "Có hiệu lực"
+                // Sử dụng stored procedure để nhất quán với pattern của project
+                using var updateCommand = new SqlCommand("sp_HopDong_Update", connection) { CommandType = CommandType.StoredProcedure };
+                
+                // Lấy thông tin hợp đồng hiện tại để cập nhật
+                using var getCurrentCommand = new SqlCommand("sp_HopDong_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                getCurrentCommand.Parameters.AddWithValue("@MaHopDong", id);
+                
+                using var currentReader = await getCurrentCommand.ExecuteReaderAsync();
+                if (!await currentReader.ReadAsync())
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy hợp đồng" });
+                }
+                
+                // Lấy các giá trị hiện tại
+                var currentMaGiuong = currentReader.GetInt32("MaGiuong");
+                var currentNgayBatDau = currentReader.GetDateTime("NgayBatDau");
+                var currentNgayKetThuc = currentReader.GetDateTime("NgayKetThuc");
+                var currentGiaPhong = currentReader.GetDecimal("GiaPhong");
+                var currentGhiChu = currentReader.IsDBNull("GhiChu") ? null : currentReader.GetString("GhiChu");
+                
+                currentReader.Close();
+                
+                // Cập nhật với TrangThai = "Đã xác nhận"
+                updateCommand.Parameters.AddWithValue("@MaHopDong", id);
+                updateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
+                updateCommand.Parameters.AddWithValue("@MaGiuong", currentMaGiuong);
+                updateCommand.Parameters.AddWithValue("@NgayBatDau", currentNgayBatDau);
+                updateCommand.Parameters.AddWithValue("@NgayKetThuc", currentNgayKetThuc);
+                updateCommand.Parameters.AddWithValue("@GiaPhong", currentGiaPhong);
+                updateCommand.Parameters.AddWithValue("@TrangThai", "Đã xác nhận");
+                updateCommand.Parameters.AddWithValue("@GhiChu", (object?)currentGhiChu ?? DBNull.Value);
+                updateCommand.Parameters.AddWithValue("@NguoiCapNhat", User.FindFirst("MaTaiKhoan")?.Value ?? "Student");
+
+                var result = await updateCommand.ExecuteNonQueryAsync();
+
+                if (result > 0)
+                {
+                    // Fetch lại hợp đồng sau khi cập nhật
+                    using var getCommand = new SqlCommand("sp_HopDong_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                    getCommand.Parameters.AddWithValue("@MaHopDong", id);
+
+                    using var reader = await getCommand.ExecuteReaderAsync();
+                    if (await reader.ReadAsync())
+                    {
+                        var contract = new HopDong
+                        {
+                            MaHopDong = reader.GetInt32("MaHopDong"),
+                            MaSinhVien = reader.GetInt32("MaSinhVien"),
+                            MaGiuong = reader.GetInt32("MaGiuong"),
+                            NgayBatDau = reader.GetDateTime("NgayBatDau"),
+                            NgayKetThuc = reader.GetDateTime("NgayKetThuc"),
+                            GiaPhong = reader.GetDecimal("GiaPhong"),
+                            TrangThai = reader.GetString("TrangThai"),
+                            GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                            IsDeleted = reader.GetBoolean("IsDeleted"),
+                            NgayTao = reader.GetDateTime("NgayTao"),
+                            NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                            NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                            NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                        };
+                        return Ok(new { success = true, data = contract, message = "Xác nhận hợp đồng thành công. Hợp đồng đang chờ nhân viên duyệt." });
+                    }
+                    return Ok(new { success = true, message = "Xác nhận hợp đồng thành công" });
+                }
+
+                return BadRequest(new { success = false, message = "Không thể xác nhận hợp đồng" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] HopDong model)
+        private (int? studentId, string? errorMessage) GetCurrentStudentId()
         {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_HopDong_Update", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaHopDong", id);
-                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
-                command.Parameters.AddWithValue("@MaGiuong", model.MaGiuong);
-                command.Parameters.AddWithValue("@NgayBatDau", model.NgayBatDau);
-                command.Parameters.AddWithValue("@NgayKetThuc", model.NgayKetThuc);
-                command.Parameters.AddWithValue("@GiaPhong", model.GiaPhong);
-                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
-                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)model.NguoiCapNhat ?? DBNull.Value);
-                var rows = await command.ExecuteNonQueryAsync();
-                if (rows == 0) return NotFound();
-                return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
-            }
-        }
+            var userId = User.FindFirst("MaTaiKhoan")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
 
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
             try
             {
                 using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-                using var command = new SqlCommand("sp_HopDong_Delete", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@MaHopDong", id);
-                var rows = await command.ExecuteNonQueryAsync();
-                if (rows == 0) return NotFound();
-                return Ok();
+                connection.Open();
+
+                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
+                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
+                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
+
+                using var reader = command.ExecuteReader();
+                if (!reader.Read())
+                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
+                
+                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
+                if (vaiTro != "Student")
+                    return (null, "Tài khoản không phải là sinh viên");
+                
+                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
+                
+                if (maSinhVien == null)
+                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
+                
+                reader.Close();
+                
+                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
+                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
+                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
+                var isValid = validateCommand.ExecuteScalar();
+                
+                if (isValid == null)
+                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
+                
+                return (maSinhVien.Value, null);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return (null, $"Lỗi hệ thống: {ex.Message}");
             }
         }
     }
