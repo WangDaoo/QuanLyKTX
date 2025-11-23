@@ -6,7 +6,7 @@ namespace KTX_Admin.Models
         public string TenMucPhi { get; set; } = string.Empty;
         public string LoaiPhi { get; set; } = string.Empty;
         public decimal GiaTien { get; set; }
-        public string DonVi { get; set; } = string.Empty;
+        public string? DonVi { get; set; }
         public bool TrangThai { get; set; } = true;
         public string? GhiChu { get; set; }
         public bool IsDeleted { get; set; }

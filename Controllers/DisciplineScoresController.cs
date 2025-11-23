@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
-using KTX_NguoiDung.Models;
+using KTX_Admin.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace KTX_NguoiDung.Controllers
+namespace KTX_Admin.Controllers
 {
 	[ApiController]
 	[Route("api/discipline-scores")]
-	[Authorize(Roles = "Student")]
+	[Authorize(Roles = "Admin,Officer")]
 	public class DisciplineScoresController : ControllerBase
 	{
 		private readonly string _connectionString;
@@ -18,23 +18,18 @@ namespace KTX_NguoiDung.Controllers
 			_connectionString = configuration.GetConnectionString("KTX") ?? throw new ArgumentNullException(nameof(configuration));
 		}
 
-		[HttpGet("my-scores")]
-		public async Task<IActionResult> GetMyScores()
+		[HttpGet]
+		public async Task<IActionResult> GetAll()
 		{
 			try
 			{
-				var (maSinhVien, errorMessage) = GetCurrentStudentId();
-				if (maSinhVien == null)
-					return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
-
 				using var connection = new SqlConnection(_connectionString);
 				await connection.OpenAsync();
 
-				using var command = new SqlCommand("sp_DiemRenLuyen_GetBySinhVien", connection)
+				using var command = new SqlCommand("sp_DiemRenLuyen_GetAll", connection)
 				{
 					CommandType = CommandType.StoredProcedure
 				};
-				command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
 
 				using var reader = await command.ExecuteReaderAsync();
 				var scores = new List<DiemRenLuyen>();
@@ -48,7 +43,7 @@ namespace KTX_NguoiDung.Controllers
 						Thang = reader.GetInt32("Thang"),
 						Nam = reader.GetInt32("Nam"),
 						DiemSo = reader.GetDecimal("DiemSo"),
-						XepLoai = reader.IsDBNull("XepLoai") ? string.Empty : reader.GetString("XepLoai"),
+						XepLoai = reader.GetString("XepLoai"),
 						GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
 						IsDeleted = reader.GetBoolean("IsDeleted"),
 						NgayTao = reader.GetDateTime("NgayTao"),
@@ -66,25 +61,19 @@ namespace KTX_NguoiDung.Controllers
 			}
 		}
 
-		[HttpGet("my/{thang:int}/{nam:int}")]
-		public async Task<IActionResult> GetMyScoreByMonth(int thang, int nam)
+		[HttpGet("{id:int}")]
+		public async Task<IActionResult> GetById(int id)
 		{
 			try
 			{
-				var (maSinhVien, errorMessage) = GetCurrentStudentId();
-				if (maSinhVien == null)
-					return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
-
 				using var connection = new SqlConnection(_connectionString);
 				await connection.OpenAsync();
 
-				using var command = new SqlCommand("sp_DiemRenLuyen_GetBySinhVienAndMonth", connection)
+				using var command = new SqlCommand("sp_DiemRenLuyen_GetById", connection)
 				{
 					CommandType = CommandType.StoredProcedure
 				};
-				command.Parameters.AddWithValue("@MaSinhVien", maSinhVien);
-				command.Parameters.AddWithValue("@Thang", thang);
-				command.Parameters.AddWithValue("@Nam", nam);
+				command.Parameters.AddWithValue("@MaDiem", id);
 
 				using var reader = await command.ExecuteReaderAsync();
 				if (await reader.ReadAsync())
@@ -96,7 +85,7 @@ namespace KTX_NguoiDung.Controllers
 						Thang = reader.GetInt32("Thang"),
 						Nam = reader.GetInt32("Nam"),
 						DiemSo = reader.GetDecimal("DiemSo"),
-						XepLoai = reader.IsDBNull("XepLoai") ? string.Empty : reader.GetString("XepLoai"),
+						XepLoai = reader.GetString("XepLoai"),
 						GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
 						IsDeleted = reader.GetBoolean("IsDeleted"),
 						NgayTao = reader.GetDateTime("NgayTao"),
@@ -106,7 +95,6 @@ namespace KTX_NguoiDung.Controllers
 					};
 					return Ok(new { success = true, data = score });
 				}
-
 				return NotFound(new { success = false, message = "Không tìm thấy điểm rèn luyện" });
 			}
 			catch (Exception ex)
@@ -115,49 +103,164 @@ namespace KTX_NguoiDung.Controllers
 			}
 		}
 
-		private (int? studentId, string? errorMessage) GetCurrentStudentId()
+		[HttpGet("by-student/{studentId:int}")]
+		public async Task<IActionResult> GetByStudent(int studentId)
 		{
-			var userId = User.FindFirst("MaTaiKhoan")?.Value;
-			if (string.IsNullOrEmpty(userId))
-				return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
-
 			try
 			{
 				using var connection = new SqlConnection(_connectionString);
-				connection.Open();
+				await connection.OpenAsync();
 
-				// Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
-				using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
-				command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
+				using var command = new SqlCommand("sp_DiemRenLuyen_GetBySinhVien", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				command.Parameters.AddWithValue("@MaSinhVien", studentId);
 
-				using var reader = command.ExecuteReader();
-				if (!reader.Read())
-					return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
-				
-				var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
-				if (vaiTro != "Student")
-					return (null, "Tài khoản không phải là sinh viên");
-				
-				var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
-				
-				if (maSinhVien == null)
-					return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
-				
-				reader.Close();
-				
-				// Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
-				using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
-				validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
-				var isValid = validateCommand.ExecuteScalar();
-				
-				if (isValid == null)
-					return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
-				
-				return (maSinhVien.Value, null);
+				using var reader = await command.ExecuteReaderAsync();
+				var scores = new List<DiemRenLuyen>();
+
+				while (await reader.ReadAsync())
+				{
+					scores.Add(new DiemRenLuyen
+					{
+						MaDiem = reader.GetInt32("MaDiem"),
+						MaSinhVien = reader.GetInt32("MaSinhVien"),
+						Thang = reader.GetInt32("Thang"),
+						Nam = reader.GetInt32("Nam"),
+						DiemSo = reader.GetDecimal("DiemSo"),
+						XepLoai = reader.GetString("XepLoai"),
+						GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+						IsDeleted = reader.GetBoolean("IsDeleted"),
+						NgayTao = reader.GetDateTime("NgayTao"),
+						NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+						NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+						NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+					});
+				}
+
+				return Ok(new { success = true, data = scores });
 			}
 			catch (Exception ex)
 			{
-				return (null, $"Lỗi hệ thống: {ex.Message}");
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+			}
+		}
+
+		[HttpPost]
+		public async Task<IActionResult> Create([FromBody] DiemRenLuyen model)
+		{
+			try
+			{
+				using var connection = new SqlConnection(_connectionString);
+				await connection.OpenAsync();
+
+				using var command = new SqlCommand("sp_DiemRenLuyen_Insert", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+				command.Parameters.AddWithValue("@Thang", model.Thang);
+				command.Parameters.AddWithValue("@Nam", model.Nam);
+				command.Parameters.AddWithValue("@DiemSo", model.DiemSo);
+				command.Parameters.AddWithValue("@XepLoai", model.XepLoai ?? "Không xếp loại");
+				command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+				command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
+
+				var newId = await command.ExecuteScalarAsync();
+				model.MaDiem = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
+
+				return CreatedAtAction(nameof(GetById), new { id = model.MaDiem }, new { success = true, data = model });
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+			}
+		}
+
+		[HttpPut("{id:int}")]
+		public async Task<IActionResult> Update(int id, [FromBody] DiemRenLuyen model)
+		{
+			try
+			{
+				using var connection = new SqlConnection(_connectionString);
+				await connection.OpenAsync();
+
+				using var command = new SqlCommand("sp_DiemRenLuyen_Update", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				command.Parameters.AddWithValue("@MaDiem", id);
+				command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+				command.Parameters.AddWithValue("@Thang", model.Thang);
+				command.Parameters.AddWithValue("@Nam", model.Nam);
+				command.Parameters.AddWithValue("@DiemSo", model.DiemSo);
+				command.Parameters.AddWithValue("@XepLoai", model.XepLoai ?? "Không xếp loại");
+				command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+				command.Parameters.AddWithValue("@NguoiCapNhat", (object?)model.NguoiCapNhat ?? DBNull.Value);
+
+				var rowsAffected = await command.ExecuteNonQueryAsync();
+				if (rowsAffected == 0)
+					return NotFound(new { success = false, message = "Không tìm thấy điểm rèn luyện" });
+
+				// Fetch lại score sau khi update để trả về data
+				using var getCommand = new SqlCommand("sp_DiemRenLuyen_GetById", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				getCommand.Parameters.AddWithValue("@MaDiem", id);
+
+				using var reader = await getCommand.ExecuteReaderAsync();
+				if (await reader.ReadAsync())
+				{
+					var updatedScore = new DiemRenLuyen
+					{
+						MaDiem = reader.GetInt32("MaDiem"),
+						MaSinhVien = reader.GetInt32("MaSinhVien"),
+						Thang = reader.GetInt32("Thang"),
+						Nam = reader.GetInt32("Nam"),
+						DiemSo = reader.GetDecimal("DiemSo"),
+						XepLoai = reader.GetString("XepLoai"),
+						GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+						IsDeleted = reader.GetBoolean("IsDeleted"),
+						NgayTao = reader.GetDateTime("NgayTao"),
+						NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+						NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+						NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+					};
+					return Ok(new { success = true, data = updatedScore, message = "Cập nhật điểm rèn luyện thành công" });
+				}
+				return Ok(new { success = true, data = model, message = "Cập nhật điểm rèn luyện thành công" });
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+			}
+		}
+
+		[HttpDelete("{id:int}")]
+		public async Task<IActionResult> Delete(int id)
+		{
+			try
+			{
+				using var connection = new SqlConnection(_connectionString);
+				await connection.OpenAsync();
+
+				using var command = new SqlCommand("sp_DiemRenLuyen_Delete", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				command.Parameters.AddWithValue("@MaDiem", id);
+
+				var rowsAffected = await command.ExecuteNonQueryAsync();
+				if (rowsAffected == 0)
+					return NotFound(new { success = false, message = "Không tìm thấy điểm rèn luyện" });
+
+				return Ok(new { success = true, message = "Xóa điểm rèn luyện thành công" });
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 	}

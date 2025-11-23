@@ -1,4 +1,6 @@
-namespace KTX_NguoiDung.Models.Responses
+using System;
+
+namespace KTX_Admin.Models.Responses
 {
     public sealed class KyLuatResponse
     {
@@ -15,12 +17,14 @@ namespace KTX_NguoiDung.Models.Responses
         public string? NguoiTao { get; set; }
         public DateTime? NgayCapNhat { get; set; }
         public string? NguoiCapNhat { get; set; }
+
         public string? TenSinhVien { get; set; }
         public string? MSSV { get; set; }
+        public string? Lop { get; set; }
+        public string? Khoa { get; set; }
         public string? SoPhong { get; set; }
         public string? TenToaNha { get; set; }
     }
 }
-
 
 

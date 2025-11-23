@@ -40,20 +40,24 @@ namespace KTX_Admin.Controllers
                     {
                         MaThongBao = reader.GetInt32("MaThongBao"),
                         MaSinhVien = reader.GetInt32("MaSinhVien"),
-                        MaHoaDon = reader.GetInt32("MaHoaDon"),
+                        MaHoaDon = reader.IsDBNull("MaHoaDon") ? (int?)null : reader.GetInt32("MaHoaDon"),
                         NgayThongBao = reader.GetDateTime("NgayThongBao"),
                         NoiDung = reader.GetString("NoiDung"),
                         TrangThai = reader.GetString("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted")
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
 
-                return Ok(notices);
+                return Ok(new { success = true, data = notices });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -70,20 +74,20 @@ namespace KTX_Admin.Controllers
                     CommandType = CommandType.StoredProcedure
                 };
                 command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
-                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon);
+                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon.HasValue && model.MaHoaDon.Value > 0 ? (object)model.MaHoaDon.Value : DBNull.Value);
                 command.Parameters.AddWithValue("@NgayThongBao", model.NgayThongBao);
                 command.Parameters.AddWithValue("@NoiDung", model.NoiDung);
                 command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
                 command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
 
                 var newId = await command.ExecuteScalarAsync();
-                model.MaThongBao = Convert.ToInt32(newId);
+                model.MaThongBao = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
 
-                return CreatedAtAction(nameof(GetById), new { id = model.MaThongBao }, model);
+                return CreatedAtAction(nameof(GetById), new { id = model.MaThongBao }, new { success = true, data = model });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -108,21 +112,25 @@ namespace KTX_Admin.Controllers
                     {
                         MaThongBao = reader.GetInt32("MaThongBao"),
                         MaSinhVien = reader.GetInt32("MaSinhVien"),
-                        MaHoaDon = reader.GetInt32("MaHoaDon"),
+                        MaHoaDon = reader.IsDBNull("MaHoaDon") ? (int?)null : reader.GetInt32("MaHoaDon"),
                         NgayThongBao = reader.GetDateTime("NgayThongBao"),
                         NoiDung = reader.GetString("NoiDung"),
                         TrangThai = reader.GetString("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted")
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     };
-                    return Ok(notice);
+                    return Ok(new { success = true, data = notice });
                 }
 
-                return NotFound();
+                return NotFound(new { success = false, message = "Không tìm thấy thông báo" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -140,7 +148,7 @@ namespace KTX_Admin.Controllers
                 };
                 command.Parameters.AddWithValue("@MaThongBao", id);
                 command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
-                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon);
+                command.Parameters.AddWithValue("@MaHoaDon", model.MaHoaDon.HasValue && model.MaHoaDon.Value > 0 ? (object)model.MaHoaDon.Value : DBNull.Value);
                 command.Parameters.AddWithValue("@NgayThongBao", model.NgayThongBao);
                 command.Parameters.AddWithValue("@NoiDung", model.NoiDung);
                 command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
@@ -148,13 +156,40 @@ namespace KTX_Admin.Controllers
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
                 if (rowsAffected == 0)
-                    return NotFound();
+                    return NotFound(new { success = false, message = "Không tìm thấy thông báo" });
 
-            return Ok(model);
+                // Fetch lại notice sau khi update để trả về data
+                using var getCommand = new SqlCommand("sp_ThongBaoQuaHan_GetById", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                getCommand.Parameters.AddWithValue("@MaThongBao", id);
+
+                using var reader = await getCommand.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var updatedNotice = new ThongBaoQuaHan
+                    {
+                        MaThongBao = reader.GetInt32("MaThongBao"),
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
+                        MaHoaDon = reader.IsDBNull("MaHoaDon") ? (int?)null : reader.GetInt32("MaHoaDon"),
+                        NgayThongBao = reader.GetDateTime("NgayThongBao"),
+                        NoiDung = reader.GetString("NoiDung"),
+                        TrangThai = reader.GetString("TrangThai"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    };
+                    return Ok(new { success = true, data = updatedNotice, message = "Cập nhật thông báo thành công" });
+                }
+                return Ok(new { success = true, data = model, message = "Cập nhật thông báo thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -174,13 +209,13 @@ namespace KTX_Admin.Controllers
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
                 if (rowsAffected == 0)
-                    return NotFound();
+                    return NotFound(new { success = false, message = "Không tìm thấy thông báo" });
 
-                return Ok();
+                return Ok(new { success = true, message = "Xóa thông báo thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }

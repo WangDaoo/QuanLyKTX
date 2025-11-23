@@ -1,16 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
+using KTX_Admin.Models;
+using KTX_Admin.Models.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using System.Security.Claims;
-using KTX_NguoiDung.Models;
-using KTX_NguoiDung.Models.Responses;
+using System.Linq;
 
-namespace KTX_NguoiDung.Controllers
+namespace KTX_Admin.Controllers
 {
     [ApiController]
     [Route("api/violations")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Admin,Officer")]
     public class ViolationsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -39,36 +39,36 @@ namespace KTX_NguoiDung.Controllers
                 NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
                 TenSinhVien = reader.IsDBNull("TenSinhVien") ? null : reader.GetString("TenSinhVien"),
                 MSSV = reader.IsDBNull("MSSV") ? null : reader.GetString("MSSV"),
+                Lop = reader.IsDBNull("Lop") ? null : reader.GetString("Lop"),
+                Khoa = reader.IsDBNull("Khoa") ? null : reader.GetString("Khoa"),
                 SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
                 TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha")
             };
         }
 
-        [HttpGet("my-violations")]
-        public async Task<IActionResult> GetMyViolations()
+        [HttpGet]
+        public async Task<IActionResult> GetAll([FromQuery] int? maSinhVien = null, [FromQuery] string? loaiViPham = null)
         {
             try
             {
-                var (studentId, errorMessage) = GetCurrentStudentId();
-                if (studentId == null)
-                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin người dùng" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_KyLuat_GetBySinhVien", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaSinhVien", studentId);
-
+                using var command = new SqlCommand("sp_KyLuat_GetAll", connection) { CommandType = CommandType.StoredProcedure };
                 using var reader = await command.ExecuteReaderAsync();
-                var violations = new List<KyLuatResponse>();
-
+                var allItems = new List<KyLuatResponse>();
                 while (await reader.ReadAsync())
                 {
-                    violations.Add(MapViolation(reader));
+                    allItems.Add(MapViolation(reader));
                 }
 
-                return Ok(new { success = true, data = violations });
+                // Lọc kết quả theo query parameters
+                var items = allItems;
+                if (maSinhVien.HasValue)
+                    items = items.Where(i => i.MaSinhVien == maSinhVien.Value).ToList();
+                if (!string.IsNullOrEmpty(loaiViPham))
+                    items = items.Where(i => i.LoaiViPham.Contains(loaiViPham, StringComparison.OrdinalIgnoreCase)).ToList();
+                
+                return Ok(new { success = true, data = items });
             }
             catch (Exception ex)
             {
@@ -76,50 +76,122 @@ namespace KTX_NguoiDung.Controllers
             }
         }
 
-        private (int? studentId, string? errorMessage) GetCurrentStudentId()
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
-            var userId = User.FindFirst("MaTaiKhoan")?.Value;
-            if (string.IsNullOrEmpty(userId))
-                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
-
             try
             {
                 using var connection = new SqlConnection(_connectionString);
-                connection.Open();
-
-                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
-                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
-                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
-
-                using var reader = command.ExecuteReader();
-                if (!reader.Read())
-                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
-                
-                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
-                if (vaiTro != "Student")
-                    return (null, "Tài khoản không phải là sinh viên");
-                
-                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
-                
-                if (maSinhVien == null)
-                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
-                
-                reader.Close();
-                
-                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
-                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
-                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
-                var isValid = validateCommand.ExecuteScalar();
-                
-                if (isValid == null)
-                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
-                
-                return (maSinhVien.Value, null);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_KyLuat_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaKyLuat", id);
+                using var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var item = MapViolation(reader);
+                    return Ok(new { success = true, data = item });
+                }
+                return NotFound(new { success = false, message = "Không tìm thấy kỷ luật" });
             }
             catch (Exception ex)
             {
-                return (null, $"Lỗi hệ thống: {ex.Message}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] KyLuat model)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_KyLuat_Insert", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+                command.Parameters.AddWithValue("@LoaiViPham", model.LoaiViPham);
+                command.Parameters.AddWithValue("@MoTa", model.MoTa);
+                command.Parameters.AddWithValue("@NgayViPham", model.NgayViPham);
+                command.Parameters.AddWithValue("@MucPhat", model.MucPhat);
+                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
+                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+                var newId = await command.ExecuteScalarAsync();
+                var createdId = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
+
+                if (createdId > 0)
+                {
+                    using var getCommand = new SqlCommand("sp_KyLuat_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                    getCommand.Parameters.AddWithValue("@MaKyLuat", createdId);
+                    using var reader = await getCommand.ExecuteReaderAsync();
+                    if (await reader.ReadAsync())
+                    {
+                        var created = MapViolation(reader);
+                        return CreatedAtAction(nameof(GetById), new { id = createdId }, new { success = true, data = created });
+                    }
+                }
+
+                return CreatedAtAction(nameof(GetById), new { id = createdId }, new { success = true, data = model });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] KyLuat model)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_KyLuat_Update", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaKyLuat", id);
+                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+                command.Parameters.AddWithValue("@LoaiViPham", model.LoaiViPham);
+                command.Parameters.AddWithValue("@MoTa", model.MoTa);
+                command.Parameters.AddWithValue("@NgayViPham", model.NgayViPham);
+                command.Parameters.AddWithValue("@MucPhat", model.MucPhat);
+                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
+                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+                var rows = await command.ExecuteNonQueryAsync();
+                if (rows == 0) return NotFound(new { success = false, message = "Không tìm thấy kỷ luật" });
+
+                // Fetch lại violation sau khi update để trả về data
+                using var getCommand = new SqlCommand("sp_KyLuat_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                getCommand.Parameters.AddWithValue("@MaKyLuat", id);
+                using var reader = await getCommand.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var updatedViolation = MapViolation(reader);
+                    return Ok(new { success = true, data = updatedViolation, message = "Cập nhật kỷ luật thành công" });
+                }
+                return Ok(new { success = true, data = model, message = "Cập nhật kỷ luật thành công" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_KyLuat_Delete", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaKyLuat", id);
+                var rows = await command.ExecuteNonQueryAsync();
+                if (rows == 0) return NotFound(new { success = false, message = "Không tìm thấy kỷ luật" });
+                return Ok(new { success = true, message = "Xóa kỷ luật thành công" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
 }
+
+

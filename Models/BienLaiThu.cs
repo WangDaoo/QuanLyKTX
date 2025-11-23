@@ -7,7 +7,7 @@ namespace KTX_Admin.Models
         public decimal SoTienThu { get; set; }
         public DateTime NgayThu { get; set; } = DateTime.UtcNow;
         public string PhuongThucThanhToan { get; set; } = "Tiền mặt";
-        public string NguoiThu { get; set; } = string.Empty;
+        public string? NguoiThu { get; set; }
         public string? GhiChu { get; set; }
         public bool IsDeleted { get; set; }
         public DateTime NgayTao { get; set; } = DateTime.UtcNow;

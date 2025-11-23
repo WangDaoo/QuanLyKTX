@@ -11,6 +11,10 @@ namespace KTX_Admin.Models
         public string TrangThai { get; set; } = "Chưa xử lý";
         public string? GhiChu { get; set; }
         public bool IsDeleted { get; set; }
+        public DateTime NgayTao { get; set; } = DateTime.UtcNow;
+        public string? NguoiTao { get; set; }
+        public DateTime? NgayCapNhat { get; set; }
+        public string? NguoiCapNhat { get; set; }
     }
 }
 

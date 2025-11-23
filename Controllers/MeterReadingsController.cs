@@ -46,19 +46,22 @@ namespace KTX_Admin.Controllers
                         Nam = reader.GetInt32("Nam"),
                         ChiSoDien = reader.GetInt32("ChiSoDien"),
                         ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
-                        NgayGhi = reader.GetDateTime("NgayGhi"),
-                        NguoiGhi = reader.GetString("NguoiGhi"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiGhi = reader.IsDBNull("NguoiGhi") ? null : reader.GetString("NguoiGhi"),
                         TrangThai = reader.GetString("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted")
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     });
                 }
 
-                return Ok(readings);
+                return Ok(new { success = true, data = readings });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -70,7 +73,7 @@ namespace KTX_Admin.Controllers
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_ChiSoDienNuoc_Insert", connection)
+                using var command = new SqlCommand("sp_ChiSoDienNuoc_Create", connection)
                 {
                     CommandType = CommandType.StoredProcedure
                 };
@@ -79,19 +82,19 @@ namespace KTX_Admin.Controllers
                 command.Parameters.AddWithValue("@Nam", model.Nam);
                 command.Parameters.AddWithValue("@ChiSoDien", model.ChiSoDien);
                 command.Parameters.AddWithValue("@ChiSoNuoc", model.ChiSoNuoc);
-                command.Parameters.AddWithValue("@NgayGhi", model.NgayGhi);
-                command.Parameters.AddWithValue("@NguoiGhi", model.NguoiGhi);
+                command.Parameters.AddWithValue("@NguoiGhi", (object?)model.NguoiGhi ?? DBNull.Value);
                 command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
                 command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+                command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
 
                 var newId = await command.ExecuteScalarAsync();
-                model.MaChiSo = Convert.ToInt32(newId);
+                model.MaChiSo = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
 
                 return CreatedAtAction(nameof(GetById), new { id = model.MaChiSo }, model);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -120,20 +123,23 @@ namespace KTX_Admin.Controllers
                         Nam = reader.GetInt32("Nam"),
                         ChiSoDien = reader.GetInt32("ChiSoDien"),
                         ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
-                        NgayGhi = reader.GetDateTime("NgayGhi"),
-                        NguoiGhi = reader.GetString("NguoiGhi"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiGhi = reader.IsDBNull("NguoiGhi") ? null : reader.GetString("NguoiGhi"),
                         TrangThai = reader.GetString("TrangThai"),
                         GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
-                        IsDeleted = reader.GetBoolean("IsDeleted")
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
                     };
-                    return Ok(reading);
+                    return Ok(new { success = true, data = reading });
                 }
 
-                return NotFound();
+                return NotFound(new { success = false, message = "Không tìm thấy chỉ số" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -155,18 +161,47 @@ namespace KTX_Admin.Controllers
                 command.Parameters.AddWithValue("@Nam", model.Nam);
                 command.Parameters.AddWithValue("@ChiSoDien", model.ChiSoDien);
                 command.Parameters.AddWithValue("@ChiSoNuoc", model.ChiSoNuoc);
-                command.Parameters.AddWithValue("@NgayGhi", model.NgayGhi);
-                command.Parameters.AddWithValue("@NguoiGhi", model.NguoiGhi);
+                command.Parameters.AddWithValue("@NguoiGhi", (object?)model.NguoiGhi ?? DBNull.Value);
                 command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
                 command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0) return NotFound();
-                return Ok(model);
+                if (rowsAffected == 0) return NotFound(new { success = false, message = "Không tìm thấy chỉ số" });
+
+                // Fetch lại meter reading sau khi update để trả về data
+                using var getCommand = new SqlCommand("sp_ChiSoDienNuoc_GetById", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                getCommand.Parameters.AddWithValue("@MaChiSo", id);
+
+                using var reader = await getCommand.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var updatedReading = new ChiSoDienNuoc
+                    {
+                        MaChiSo = reader.GetInt32("MaChiSo"),
+                        MaPhong = reader.GetInt32("MaPhong"),
+                        Thang = reader.GetInt32("Thang"),
+                        Nam = reader.GetInt32("Nam"),
+                        ChiSoDien = reader.GetInt32("ChiSoDien"),
+                        ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiGhi = reader.IsDBNull("NguoiGhi") ? null : reader.GetString("NguoiGhi"),
+                        TrangThai = reader.GetString("TrangThai"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    };
+                    return Ok(new { success = true, data = updatedReading, message = "Cập nhật chỉ số thành công" });
+                }
+                return Ok(new { success = true, data = model, message = "Cập nhật chỉ số thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -185,12 +220,12 @@ namespace KTX_Admin.Controllers
                 command.Parameters.AddWithValue("@MaChiSo", id);
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected == 0) return NotFound();
-            return Ok();
+                if (rowsAffected == 0) return NotFound(new { success = false, message = "Không tìm thấy chỉ số" });
+                return Ok(new { success = true, message = "Xóa chỉ số thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -200,10 +235,10 @@ namespace KTX_Admin.Controllers
             try
             {
                 if (file == null || file.Length == 0)
-                    return BadRequest(new { message = "Vui lòng chọn file Excel" });
+                    return BadRequest(new { success = false, message = "Vui lòng chọn file Excel" });
 
                 if (!file.FileName.EndsWith(".xlsx") && !file.FileName.EndsWith(".xls"))
-                    return BadRequest(new { message = "Chỉ hỗ trợ file Excel (.xlsx, .xls)" });
+                    return BadRequest(new { success = false, message = "Chỉ hỗ trợ file Excel (.xlsx, .xls)" });
 
                 using var stream = file.OpenReadStream();
                 using var reader = ExcelReaderFactory.CreateReader(stream);
@@ -276,11 +311,11 @@ namespace KTX_Admin.Controllers
                     }
                 }
 
-                return Ok(new { message = "Import hoàn thành", importedCount, errorCount, errors = errors.Take(10).ToList(), totalErrors = errors.Count });
+                return Ok(new { success = true, data = new { importedCount, errorCount, errors = errors.Take(10).ToList(), totalErrors = errors.Count }, message = "Import hoàn thành" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi import Excel: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi import Excel: {ex.Message}" });
             }
         }
 
@@ -310,7 +345,100 @@ namespace KTX_Admin.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi tạo template: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi tạo template: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("by-room/{maPhong:int}")]
+        public async Task<IActionResult> GetByPhong(int maPhong)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using var command = new SqlCommand("sp_ChiSoDienNuoc_GetByPhong", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@MaPhong", maPhong);
+
+                using var reader = await command.ExecuteReaderAsync();
+                var readings = new List<ChiSoDienNuoc>();
+
+                while (await reader.ReadAsync())
+                {
+                    readings.Add(new ChiSoDienNuoc
+                    {
+                        MaChiSo = reader.GetInt32("MaChiSo"),
+                        MaPhong = reader.GetInt32("MaPhong"),
+                        Thang = reader.GetInt32("Thang"),
+                        Nam = reader.GetInt32("Nam"),
+                        ChiSoDien = reader.GetInt32("ChiSoDien"),
+                        ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiGhi = reader.IsDBNull("NguoiGhi") ? null : reader.GetString("NguoiGhi"),
+                        TrangThai = reader.GetString("TrangThai"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    });
+                }
+
+                return Ok(new { success = true, data = readings });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("by-month/{thang:int}/{nam:int}")]
+        public async Task<IActionResult> GetByThangNam(int thang, int nam)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using var command = new SqlCommand("sp_ChiSoDienNuoc_GetByThangNam", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@Thang", thang);
+                command.Parameters.AddWithValue("@Nam", nam);
+
+                using var reader = await command.ExecuteReaderAsync();
+                var readings = new List<ChiSoDienNuoc>();
+
+                while (await reader.ReadAsync())
+                {
+                    readings.Add(new ChiSoDienNuoc
+                    {
+                        MaChiSo = reader.GetInt32("MaChiSo"),
+                        MaPhong = reader.GetInt32("MaPhong"),
+                        Thang = reader.GetInt32("Thang"),
+                        Nam = reader.GetInt32("Nam"),
+                        ChiSoDien = reader.GetInt32("ChiSoDien"),
+                        ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiGhi = reader.IsDBNull("NguoiGhi") ? null : reader.GetString("NguoiGhi"),
+                        TrangThai = reader.GetString("TrangThai"),
+                        GhiChu = reader.IsDBNull("GhiChu") ? null : reader.GetString("GhiChu"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+                    });
+                }
+
+                return Ok(new { success = true, data = readings });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }

@@ -6,7 +6,7 @@ namespace KTX_Admin.Models
 		public int MaPhong { get; set; }
 		public string SoGiuong { get; set; } = string.Empty;
 		public string TrangThai { get; set; } = "Trống";
-		public string? GhiChu { get; set; }
+		public string? MoTa { get; set; }
 		public bool IsDeleted { get; set; }
 		public DateTime NgayTao { get; set; } = DateTime.UtcNow;
 		public string? NguoiTao { get; set; }

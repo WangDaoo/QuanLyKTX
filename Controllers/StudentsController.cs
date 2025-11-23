@@ -1,16 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
+using KTX_Admin.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using System.Security.Claims;
-using KTX_NguoiDung.Models;
-using BCrypt.Net;
 
-namespace KTX_NguoiDung.Controllers
+namespace KTX_Admin.Controllers
 {
     [ApiController]
     [Route("api/students")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Admin,Officer")]
     public class StudentsController : ControllerBase
     {
         private readonly string _connectionString;
@@ -20,48 +18,50 @@ namespace KTX_NguoiDung.Controllers
             _connectionString = configuration.GetConnectionString("KTX") ?? throw new ArgumentNullException(nameof(configuration));
         }
 
-        [HttpGet("profile")]
-        public async Task<IActionResult> GetProfile()
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
         {
             try
             {
-                var userId = User.FindFirst("MaTaiKhoan")?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized(new { success = false, message = "Không tìm thấy thông tin người dùng" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_SinhVien_GetByTaiKhoan", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
+                using var command = new SqlCommand("sp_SinhVien_GetAll", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
 
                 using var reader = await command.ExecuteReaderAsync();
-                
-                if (await reader.ReadAsync())
+                var students = new List<SinhVien>();
+
+                while (await reader.ReadAsync())
                 {
-                    var profile = new
+                    students.Add(new SinhVien
                     {
                         MaSinhVien = reader.GetInt32("MaSinhVien"),
                         HoTen = reader.GetString("HoTen"),
-                        MSSV = reader.IsDBNull("MSSV") ? null : reader.GetString("MSSV"),
+                        MSSV = reader.GetString("MSSV"),
+                        Lop = reader.GetString("Lop"),
+                        Khoa = reader.GetString("Khoa"),
                         NgaySinh = reader.IsDBNull("NgaySinh") ? (DateTime?)null : reader.GetDateTime("NgaySinh"),
                         GioiTinh = reader.IsDBNull("GioiTinh") ? null : reader.GetString("GioiTinh"),
                         SDT = reader.IsDBNull("SDT") ? null : reader.GetString("SDT"),
                         Email = reader.IsDBNull("Email") ? null : reader.GetString("Email"),
                         DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
                         AnhDaiDien = reader.IsDBNull("AnhDaiDien") ? null : reader.GetString("AnhDaiDien"),
-                        Lop = reader.IsDBNull("Lop") ? null : reader.GetString("Lop"),
-                        Khoa = reader.IsDBNull("Khoa") ? null : reader.GetString("Khoa"),
                         TrangThai = reader.GetBoolean("TrangThai"),
-                        MaPhong = reader.IsDBNull("MaPhong") ? (int?)null : reader.GetInt32("MaPhong"),
+                        MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
                         SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
                         TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha")
-                    };
-                    return Ok(new { success = true, data = profile });
+                    });
                 }
 
-                return NotFound(new { success = false, message = "Không tìm thấy thông tin sinh viên" });
+                return Ok(new { success = true, data = students });
             }
             catch (Exception ex)
             {
@@ -69,70 +69,157 @@ namespace KTX_NguoiDung.Controllers
             }
         }
 
-        [HttpPut("profile")]
-        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
             try
             {
-                var userId = User.FindFirst("MaTaiKhoan")?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized(new { success = false, message = "Không tìm thấy thông tin người dùng" });
-
-                // Lấy MaSinhVien từ MaTaiKhoan
-                var (studentId, errorMessage) = GetCurrentStudentId();
-                if (studentId == null)
-                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin sinh viên" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                using var command = new SqlCommand("sp_SinhVien_UpdateProfile", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaSinhVien", studentId);
-                command.Parameters.AddWithValue("@HoTen", request.HoTen ?? string.Empty);
-                command.Parameters.AddWithValue("@NgaySinh", (object?)request.NgaySinh ?? DBNull.Value);
-                command.Parameters.AddWithValue("@GioiTinh", (object?)request.GioiTinh ?? DBNull.Value);
-                command.Parameters.AddWithValue("@SDT", (object?)request.SDT ?? DBNull.Value);
-                command.Parameters.AddWithValue("@Email", (object?)request.Email ?? DBNull.Value);
-                command.Parameters.AddWithValue("@DiaChi", (object?)request.DiaChi ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)User.FindFirst("MaTaiKhoan")?.Value ?? DBNull.Value);
-
-                var result = await command.ExecuteNonQueryAsync();
-                
-                if (result > 0)
+                using var command = new SqlCommand("sp_SinhVien_GetById", connection)
                 {
-                    // Fetch lại profile sau khi update để trả về data
-                    using var getCommand = new SqlCommand("sp_SinhVien_GetByTaiKhoan", connection);
-                    getCommand.CommandType = CommandType.StoredProcedure;
-                    getCommand.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@MaSinhVien", id);
+
+                using var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var student = new SinhVien
+                    {
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
+                        HoTen = reader.GetString("HoTen"),
+                        MSSV = reader.GetString("MSSV"),
+                        Lop = reader.GetString("Lop"),
+                        Khoa = reader.GetString("Khoa"),
+                        NgaySinh = reader.IsDBNull("NgaySinh") ? (DateTime?)null : reader.GetDateTime("NgaySinh"),
+                        GioiTinh = reader.IsDBNull("GioiTinh") ? null : reader.GetString("GioiTinh"),
+                        SDT = reader.IsDBNull("SDT") ? null : reader.GetString("SDT"),
+                        Email = reader.IsDBNull("Email") ? null : reader.GetString("Email"),
+                        DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
+                        AnhDaiDien = reader.IsDBNull("AnhDaiDien") ? null : reader.GetString("AnhDaiDien"),
+                        TrangThai = reader.GetBoolean("TrangThai"),
+                        MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
+                        SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
+                        TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha")
+                    };
+                    return Ok(new { success = true, data = student });
+                }
+                return NotFound(new { success = false, message = "Không tìm thấy sinh viên" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CreateSinhVienRequest request)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using var command = new SqlCommand("sp_SinhVien_Create", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+
+                command.Parameters.AddWithValue("@HoTen", request.HoTen);
+                command.Parameters.AddWithValue("@MSSV", request.MSSV);
+                command.Parameters.AddWithValue("@Lop", request.Lop);
+                command.Parameters.AddWithValue("@Khoa", request.Khoa);
+                command.Parameters.AddWithValue("@NgaySinh", request.NgaySinh ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@GioiTinh", request.GioiTinh ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@SDT", request.SDT ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@Email", request.Email ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@DiaChi", request.DiaChi ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@AnhDaiDien", (object?)request.AnhDaiDien ?? DBNull.Value);
+                command.Parameters.AddWithValue("@TrangThai", true);
+                command.Parameters.AddWithValue("@MaPhong", request.MaPhong ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@NguoiTao", (object?)null ?? DBNull.Value);
+
+                var newId = await command.ExecuteScalarAsync();
+                return CreatedAtAction(nameof(GetById), new { id = newId }, new { success = true, data = new { MaSinhVien = newId }, message = $"Tạo sinh viên thành công. Tài khoản đã được tạo tự động với tên đăng nhập và mật khẩu là MSSV: {request.MSSV}" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateSinhVienRequest request)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using var command = new SqlCommand("sp_SinhVien_Update", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+
+                command.Parameters.AddWithValue("@MaSinhVien", id);
+                command.Parameters.AddWithValue("@HoTen", request.HoTen);
+                command.Parameters.AddWithValue("@MSSV", request.MSSV);
+                command.Parameters.AddWithValue("@Lop", request.Lop);
+                command.Parameters.AddWithValue("@Khoa", request.Khoa);
+                command.Parameters.AddWithValue("@NgaySinh", request.NgaySinh ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@GioiTinh", request.GioiTinh ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@SDT", request.SDT ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@Email", request.Email ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@DiaChi", request.DiaChi ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@MaPhong", request.MaPhong ?? (object)DBNull.Value);
+
+                var affectedRows = await command.ExecuteScalarAsync();
+                if (Convert.ToInt32(affectedRows) > 0)
+                {
+                    // Fetch lại student sau khi update để trả về data
+                    using var getCommand = new SqlCommand("sp_SinhVien_GetById", connection)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+                    getCommand.Parameters.AddWithValue("@MaSinhVien", id);
 
                     using var reader = await getCommand.ExecuteReaderAsync();
                     if (await reader.ReadAsync())
                     {
-                        var updatedProfile = new
+                        var updatedStudent = new SinhVien
                         {
                             MaSinhVien = reader.GetInt32("MaSinhVien"),
                             HoTen = reader.GetString("HoTen"),
-                            MSSV = reader.IsDBNull("MSSV") ? null : reader.GetString("MSSV"),
+                            MSSV = reader.GetString("MSSV"),
+                            Lop = reader.GetString("Lop"),
+                            Khoa = reader.GetString("Khoa"),
                             NgaySinh = reader.IsDBNull("NgaySinh") ? (DateTime?)null : reader.GetDateTime("NgaySinh"),
                             GioiTinh = reader.IsDBNull("GioiTinh") ? null : reader.GetString("GioiTinh"),
                             SDT = reader.IsDBNull("SDT") ? null : reader.GetString("SDT"),
                             Email = reader.IsDBNull("Email") ? null : reader.GetString("Email"),
                             DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
                             AnhDaiDien = reader.IsDBNull("AnhDaiDien") ? null : reader.GetString("AnhDaiDien"),
-                            Lop = reader.IsDBNull("Lop") ? null : reader.GetString("Lop"),
-                            Khoa = reader.IsDBNull("Khoa") ? null : reader.GetString("Khoa"),
                             TrangThai = reader.GetBoolean("TrangThai"),
-                            MaPhong = reader.IsDBNull("MaPhong") ? (int?)null : reader.GetInt32("MaPhong"),
+                            MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
+                            IsDeleted = reader.GetBoolean("IsDeleted"),
+                            NgayTao = reader.GetDateTime("NgayTao"),
+                            NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                            NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                            NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
                             SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
                             TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha")
                         };
-                        return Ok(new { success = true, data = updatedProfile, message = "Cập nhật thông tin cá nhân thành công" });
+                        return Ok(new { success = true, data = updatedStudent, message = "Cập nhật sinh viên thành công" });
                     }
-                    return Ok(new { success = true, message = "Cập nhật thông tin cá nhân thành công" });
                 }
-
-                return BadRequest(new { success = false, message = "Không thể cập nhật thông tin" });
+                return NotFound(new { success = false, message = "Không tìm thấy sinh viên" });
             }
             catch (Exception ex)
             {
@@ -140,68 +227,24 @@ namespace KTX_NguoiDung.Controllers
             }
         }
 
-        [HttpPost("change-password")]
-        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
         {
             try
             {
-                var userId = User.FindFirst("MaTaiKhoan")?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized(new { success = false, message = "Không tìm thấy thông tin người dùng" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
 
-                // Lấy mật khẩu hiện tại từ database
-                using var getPasswordCommand = new SqlCommand("SELECT MatKhau FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
-                getPasswordCommand.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
-
-                var oldHashedPassword = await getPasswordCommand.ExecuteScalarAsync() as string;
-                
-                if (oldHashedPassword == null)
-                    return Unauthorized(new { success = false, message = "Không tìm thấy tài khoản" });
-
-                // Validate mật khẩu cũ
-                var isPasswordValid = false;
-                try
+                using var command = new SqlCommand("sp_SinhVien_Delete", connection)
                 {
-                    var isBcrypt = oldHashedPassword.StartsWith("$2");
-                    if (isBcrypt)
-                    {
-                        isPasswordValid = BCrypt.Net.BCrypt.Verify(request.OldPassword, oldHashedPassword);
-                    }
-                    else
-                    {
-                        // Fallback: so sánh plaintext (cho legacy accounts)
-                        isPasswordValid = oldHashedPassword == request.OldPassword;
-                    }
-                }
-                catch
-                {
-                    isPasswordValid = false;
-                }
+                    CommandType = CommandType.StoredProcedure
+                };
 
-                if (!isPasswordValid)
-                    return BadRequest(new { success = false, message = "Mật khẩu cũ không đúng" });
+                command.Parameters.AddWithValue("@MaSinhVien", id);
 
-                // Hash mật khẩu mới với BCrypt
-                var newHashedPassword = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-
-                // Cập nhật mật khẩu
-                using var command = new SqlCommand("sp_TaiKhoan_ChangePassword", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
-                command.Parameters.AddWithValue("@MatKhauMoi", newHashedPassword);
-                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)User.FindFirst("MaTaiKhoan")?.Value ?? DBNull.Value);
-
-                var result = await command.ExecuteNonQueryAsync();
-                
-                if (result > 0)
-                {
-                    return Ok(new { success = true, message = "Đổi mật khẩu thành công" });
-                }
-
-                return BadRequest(new { success = false, message = "Không thể đổi mật khẩu" });
+                var affectedRows = await command.ExecuteScalarAsync();
+                if (Convert.ToInt32(affectedRows) > 0) return Ok(new { success = true, message = "Xóa sinh viên thành công" });
+                return NotFound(new { success = false, message = "Không tìm thấy sinh viên" });
             }
             catch (Exception ex)
             {
@@ -209,66 +252,89 @@ namespace KTX_NguoiDung.Controllers
             }
         }
 
-        private (int? studentId, string? errorMessage) GetCurrentStudentId()
+        [HttpGet("by-room/{maPhong:int}")]
+        public async Task<IActionResult> GetByRoom(int maPhong)
         {
-            var userId = User.FindFirst("MaTaiKhoan")?.Value;
-            if (string.IsNullOrEmpty(userId))
-                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
-
             try
             {
-            using var connection = new SqlConnection(_connectionString);
-            connection.Open();
-                
-                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
-                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
-            command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
-                
-                using var reader = command.ExecuteReader();
-                if (!reader.Read())
-                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
-                
-                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
-                if (vaiTro != "Student")
-                    return (null, "Tài khoản không phải là sinh viên");
-                
-                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
-                
-                if (maSinhVien == null)
-                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
-                
-                reader.Close();
-                
-                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
-                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
-                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
-                var isValid = validateCommand.ExecuteScalar();
-                
-                if (isValid == null)
-                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
-                
-                return (maSinhVien.Value, null);
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using var command = new SqlCommand("sp_SinhVien_GetByPhong", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@MaPhong", maPhong);
+
+                using var reader = await command.ExecuteReaderAsync();
+                var students = new List<SinhVien>();
+                while (await reader.ReadAsync())
+                {
+                    students.Add(new SinhVien
+                    {
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
+                        HoTen = reader.GetString("HoTen"),
+                        MSSV = reader.GetString("MSSV"),
+                        Lop = reader.GetString("Lop"),
+                        Khoa = reader.GetString("Khoa"),
+                        NgaySinh = reader.IsDBNull("NgaySinh") ? (DateTime?)null : reader.GetDateTime("NgaySinh"),
+                        GioiTinh = reader.IsDBNull("GioiTinh") ? null : reader.GetString("GioiTinh"),
+                        SDT = reader.IsDBNull("SDT") ? null : reader.GetString("SDT"),
+                        Email = reader.IsDBNull("Email") ? null : reader.GetString("Email"),
+                        DiaChi = reader.IsDBNull("DiaChi") ? null : reader.GetString("DiaChi"),
+                        AnhDaiDien = reader.IsDBNull("AnhDaiDien") ? null : reader.GetString("AnhDaiDien"),
+                        TrangThai = reader.GetBoolean("TrangThai"),
+                        MaPhong = reader.IsDBNull("MaPhong") ? null : reader.GetInt32("MaPhong"),
+                        IsDeleted = reader.GetBoolean("IsDeleted"),
+                        NgayTao = reader.GetDateTime("NgayTao"),
+                        NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+                        NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+                        NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
+                        SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
+                        TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha")
+                    });
+                }
+                return Ok(new { success = true, data = students });
             }
             catch (Exception ex)
             {
-                return (null, $"Lỗi hệ thống: {ex.Message}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
 
-    public class UpdateProfileRequest
+    // Request Models
+    public class CreateSinhVienRequest
     {
         public string HoTen { get; set; } = string.Empty;
+        public string MSSV { get; set; } = string.Empty;
+        public string Lop { get; set; } = string.Empty;
+        public string Khoa { get; set; } = string.Empty;
         public DateTime? NgaySinh { get; set; }
         public string? GioiTinh { get; set; }
         public string? SDT { get; set; }
         public string? Email { get; set; }
         public string? DiaChi { get; set; }
+        public string? AnhDaiDien { get; set; }
+        public int? MaPhong { get; set; }
     }
 
-    public class ChangePasswordRequest
+    public class UpdateSinhVienRequest
     {
-        public string OldPassword { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
+        public string HoTen { get; set; } = string.Empty;
+        public string MSSV { get; set; } = string.Empty;
+        public string Lop { get; set; } = string.Empty;
+        public string Khoa { get; set; } = string.Empty;
+        public DateTime? NgaySinh { get; set; }
+        public string? GioiTinh { get; set; }
+        public string? SDT { get; set; }
+        public string? Email { get; set; }
+        public string? DiaChi { get; set; }
+        public int? MaPhong { get; set; }
     }
 }
+
+
+
+
+

@@ -1,16 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
+using KTX_Admin.Models;
+using KTX_Admin.Models.Responses;
 using Microsoft.AspNetCore.Authorization;
-using KTX_NguoiDung.Models;
-using KTX_NguoiDung.Models.Responses;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using System.Security.Claims;
 
-namespace KTX_NguoiDung.Controllers
+namespace KTX_Admin.Controllers
 {
     [ApiController]
     [Route("api/registrations")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Admin,Officer")]
     public class RegistrationController : ControllerBase
     {
         private readonly string _connectionString;
@@ -26,7 +25,7 @@ namespace KTX_NguoiDung.Controllers
             {
                 MaDon = reader.GetInt32("MaDon"),
                 MaSinhVien = reader.GetInt32("MaSinhVien"),
-                MaPhongDeXuat = reader.IsDBNull("MaPhongDeXuat") ? (int?)null : reader.GetInt32("MaPhongDeXuat"),
+                MaPhongDeXuat = reader.IsDBNull("MaPhongDeXuat") ? null : reader.GetInt32("MaPhongDeXuat"),
                 TrangThai = reader.GetString("TrangThai"),
                 LyDo = reader.IsDBNull("LyDo") ? null : reader.GetString("LyDo"),
                 NgayDangKy = reader.GetDateTime("NgayDangKy"),
@@ -38,36 +37,51 @@ namespace KTX_NguoiDung.Controllers
                 NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat"),
                 TenSinhVien = reader.IsDBNull("TenSinhVien") ? null : reader.GetString("TenSinhVien"),
                 MSSV = reader.IsDBNull("MSSV") ? null : reader.GetString("MSSV"),
+                Lop = reader.IsDBNull("Lop") ? null : reader.GetString("Lop"),
+                Khoa = reader.IsDBNull("Khoa") ? null : reader.GetString("Khoa"),
                 PhongDeXuat = reader.IsDBNull("PhongDeXuat") ? null : reader.GetString("PhongDeXuat"),
                 ToaNhaDeXuat = reader.IsDBNull("ToaNhaDeXuat") ? null : reader.GetString("ToaNhaDeXuat")
             };
         }
 
-        [HttpGet("my-registrations")]
-        public async Task<IActionResult> GetMyRegistrations()
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
         {
             try
             {
-                var (studentId, errorMessage) = GetCurrentStudentId();
-                if (studentId == null)
-                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin sinh viên" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
-
-                using var command = new SqlCommand("sp_DonDangKy_GetBySinhVien", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaSinhVien", studentId);
-
+                using var command = new SqlCommand("sp_DonDangKy_GetAll", connection) { CommandType = CommandType.StoredProcedure };
                 using var reader = await command.ExecuteReaderAsync();
-                var registrations = new List<DonDangKyResponse>();
-                
+                var items = new List<DonDangKyResponse>();
                 while (await reader.ReadAsync())
                 {
-                    registrations.Add(MapRegistration(reader));
+                    items.Add(MapRegistration(reader));
                 }
+                return Ok(new { success = true, data = items });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
 
-                return Ok(new { success = true, data = registrations });
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_DonDangKy_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaDon", id);
+                using var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var item = MapRegistration(reader);
+                    return Ok(new { success = true, data = item });
+                }
+                return NotFound(new { success = false, message = "Không tìm thấy đơn đăng ký" });
             }
             catch (Exception ex)
             {
@@ -76,44 +90,36 @@ namespace KTX_NguoiDung.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateRegistrationRequest request)
+        public async Task<IActionResult> Create([FromBody] DonDangKy model)
         {
             try
             {
-                var (studentId, errorMessage) = GetCurrentStudentId();
-                if (studentId == null)
-                    return Unauthorized(new { success = false, message = errorMessage ?? "Không tìm thấy thông tin sinh viên" });
-
                 using var connection = new SqlConnection(_connectionString);
                 await connection.OpenAsync();
+                using var command = new SqlCommand("sp_DonDangKy_Create", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+                command.Parameters.AddWithValue("@MaPhongDeXuat", (object?)model.MaPhongDeXuat ?? DBNull.Value);
+                command.Parameters.AddWithValue("@LyDo", (object?)model.LyDo ?? DBNull.Value);
+                command.Parameters.AddWithValue("@NgayDangKy", model.NgayDangKy);
+                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
+                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+                command.Parameters.AddWithValue("@NguoiTao", (object?)model.NguoiTao ?? DBNull.Value);
+                var newId = await command.ExecuteScalarAsync();
+                model.MaDon = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
 
-                using var command = new SqlCommand("sp_DonDangKy_Create", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue("@MaSinhVien", studentId);
-                command.Parameters.AddWithValue("@MaPhongDeXuat", (object?)request.MaPhongDeXuat ?? DBNull.Value);
-                command.Parameters.AddWithValue("@LyDo", (object?)request.LyDo ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NgayDangKy", DateTime.Now.Date);
-                command.Parameters.AddWithValue("@GhiChu", (object?)request.GhiChu ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NguoiTao", (object?)User.FindFirst("MaTaiKhoan")?.Value ?? DBNull.Value);
-
-                var maDon = await command.ExecuteScalarAsync();
-                
-                if (maDon != null && maDon != DBNull.Value)
+                if (model.MaDon > 0)
                 {
-                    // Fetch lại registration sau khi tạo để trả về data
                     using var getCommand = new SqlCommand("sp_DonDangKy_GetById", connection) { CommandType = CommandType.StoredProcedure };
-                    getCommand.Parameters.AddWithValue("@MaDon", Convert.ToInt32(maDon));
+                    getCommand.Parameters.AddWithValue("@MaDon", model.MaDon);
                     using var reader = await getCommand.ExecuteReaderAsync();
-                    
                     if (await reader.ReadAsync())
                     {
-                        var registration = MapRegistration(reader);
-                        return Ok(new { success = true, data = registration, message = "Tạo đơn đăng ký thành công" });
+                        var created = MapRegistration(reader);
+                        return CreatedAtAction(nameof(GetById), new { id = model.MaDon }, new { success = true, data = created });
                     }
-                    return Ok(new { success = true, message = "Tạo đơn đăng ký thành công" });
                 }
 
-                return BadRequest(new { success = false, message = "Không thể tạo đơn đăng ký" });
+                return CreatedAtAction(nameof(GetById), new { id = model.MaDon }, new { success = true, data = model });
             }
             catch (Exception ex)
             {
@@ -121,57 +127,61 @@ namespace KTX_NguoiDung.Controllers
             }
         }
 
-        private (int? studentId, string? errorMessage) GetCurrentStudentId()
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] DonDangKy model)
         {
-            var userId = User.FindFirst("MaTaiKhoan")?.Value;
-            if (string.IsNullOrEmpty(userId))
-                return (null, "Token không hợp lệ hoặc không có thông tin người dùng");
-
             try
             {
                 using var connection = new SqlConnection(_connectionString);
-                connection.Open();
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_DonDangKy_Update", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaDon", id);
+                command.Parameters.AddWithValue("@MaSinhVien", model.MaSinhVien);
+                command.Parameters.AddWithValue("@MaPhongDeXuat", (object?)model.MaPhongDeXuat ?? DBNull.Value);
+                command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
+                command.Parameters.AddWithValue("@LyDo", (object?)model.LyDo ?? DBNull.Value);
+                command.Parameters.AddWithValue("@NgayDangKy", model.NgayDangKy);
+                command.Parameters.AddWithValue("@GhiChu", (object?)model.GhiChu ?? DBNull.Value);
+                command.Parameters.AddWithValue("@NguoiCapNhat", (object?)model.NguoiCapNhat ?? DBNull.Value);
+                var rows = await command.ExecuteNonQueryAsync();
+                if (rows == 0) return NotFound(new { success = false, message = "Không tìm thấy đơn đăng ký" });
 
-                // Lấy MaSinhVien từ TaiKhoan (nghiệp vụ: tài khoản Student PHẢI có MaSinhVien)
-                using var command = new SqlCommand("SELECT MaSinhVien, VaiTro FROM TaiKhoan WHERE MaTaiKhoan = @MaTaiKhoan AND IsDeleted = 0", connection);
-                command.Parameters.AddWithValue("@MaTaiKhoan", Convert.ToInt32(userId));
-
-                using var reader = command.ExecuteReader();
-                if (!reader.Read())
-                    return (null, "Tài khoản không tồn tại hoặc đã bị xóa");
-                
-                var vaiTro = reader.IsDBNull("VaiTro") ? null : reader.GetString("VaiTro");
-                if (vaiTro != "Student")
-                    return (null, "Tài khoản không phải là sinh viên");
-                
-                var maSinhVien = reader.IsDBNull("MaSinhVien") ? (int?)null : reader.GetInt32("MaSinhVien");
-                
-                if (maSinhVien == null)
-                    return (null, "Tài khoản sinh viên chưa được liên kết với thông tin sinh viên"); // Nghiệp vụ: Student phải có MaSinhVien
-                
-                reader.Close();
-                
-                // Validate SinhVien tồn tại và không bị xóa (nghiệp vụ: đảm bảo tính hợp lệ)
-                using var validateCommand = new SqlCommand("SELECT 1 FROM SinhVien WHERE MaSinhVien = @MaSinhVien AND IsDeleted = 0", connection);
-                validateCommand.Parameters.AddWithValue("@MaSinhVien", maSinhVien.Value);
-                var isValid = validateCommand.ExecuteScalar();
-                
-                if (isValid == null)
-                    return (null, "Thông tin sinh viên không tồn tại hoặc đã bị xóa");
-                
-                return (maSinhVien.Value, null);
+                // Fetch lại registration sau khi update để trả về data
+                using var getCommand = new SqlCommand("sp_DonDangKy_GetById", connection) { CommandType = CommandType.StoredProcedure };
+                getCommand.Parameters.AddWithValue("@MaDon", id);
+                using var reader = await getCommand.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var updatedRegistration = MapRegistration(reader);
+                    return Ok(new { success = true, data = updatedRegistration, message = "Cập nhật đơn đăng ký thành công" });
+                }
+                return Ok(new { success = true, data = model, message = "Cập nhật đơn đăng ký thành công" });
             }
             catch (Exception ex)
             {
-                return (null, $"Lỗi hệ thống: {ex.Message}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+                using var command = new SqlCommand("sp_DonDangKy_Delete", connection) { CommandType = CommandType.StoredProcedure };
+                command.Parameters.AddWithValue("@MaDon", id);
+                var rows = await command.ExecuteNonQueryAsync();
+                if (rows == 0) return NotFound(new { success = false, message = "Không tìm thấy đơn đăng ký" });
+                return Ok(new { success = true, message = "Xóa đơn đăng ký thành công" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
-
-    public class CreateRegistrationRequest
-    {
-        public int? MaPhongDeXuat { get; set; }
-        public string? LyDo { get; set; }
-        public string? GhiChu { get; set; }
-    }
 }
+
+

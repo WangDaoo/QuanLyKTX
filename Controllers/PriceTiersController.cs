@@ -44,15 +44,15 @@ namespace KTX_Admin.Controllers
 						TuSo = reader.IsDBNull("TuSo") ? null : reader.GetInt32("TuSo"),
 						DenSo = reader.IsDBNull("DenSo") ? null : reader.GetInt32("DenSo"),
 						DonGia = reader.GetDecimal("DonGia"),
-						TrangThai = reader.GetBoolean("TrangThai")
+                        TrangThai = reader.GetBoolean("TrangThai")
 					});
 				}
 
-				return Ok(priceTiers);
+				return Ok(new { success = true, data = priceTiers });
 			}
 			catch (Exception ex)
 			{
-				return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 
@@ -81,15 +81,15 @@ namespace KTX_Admin.Controllers
 						TuSo = reader.IsDBNull("TuSo") ? null : reader.GetInt32("TuSo"),
 						DenSo = reader.IsDBNull("DenSo") ? null : reader.GetInt32("DenSo"),
 						DonGia = reader.GetDecimal("DonGia"),
-						TrangThai = reader.GetBoolean("TrangThai")
+                        TrangThai = reader.GetBoolean("TrangThai")
 					};
-					return Ok(priceTier);
+					return Ok(new { success = true, data = priceTier });
 				}
-				return NotFound();
+				return NotFound(new { success = false, message = "Không tìm thấy bậc giá" });
 			}
 			catch (Exception ex)
 			{
-				return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 
@@ -113,13 +113,13 @@ namespace KTX_Admin.Controllers
 				command.Parameters.AddWithValue("@TrangThai", model.TrangThai);
 
 				var newId = await command.ExecuteScalarAsync();
-				model.MaBac = Convert.ToInt32(newId);
+				model.MaBac = newId != null && newId != DBNull.Value ? Convert.ToInt32(newId) : 0;
 
-				return CreatedAtAction(nameof(GetById), new { id = model.MaBac }, model);
+				return CreatedAtAction(nameof(GetById), new { id = model.MaBac }, new { success = true, data = model });
 			}
 			catch (Exception ex)
 			{
-				return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 
@@ -145,13 +145,40 @@ namespace KTX_Admin.Controllers
 
 				var rowsAffected = await command.ExecuteNonQueryAsync();
 				if (rowsAffected == 0)
-					return NotFound();
+					return NotFound(new { success = false, message = "Không tìm thấy bậc giá" });
 
-				return Ok(model);
+				// Fetch lại price tier sau khi update để trả về data
+				using var getCommand = new SqlCommand("sp_BacGia_GetById", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				getCommand.Parameters.AddWithValue("@MaBac", id);
+
+				using var reader = await getCommand.ExecuteReaderAsync();
+				if (await reader.ReadAsync())
+				{
+					var updatedPriceTier = new BacGia
+					{
+						MaBac = reader.GetInt32("MaBac"),
+						Loai = reader.GetString("Loai"),
+						ThuTu = reader.GetInt32("ThuTu"),
+						TuSo = reader.IsDBNull("TuSo") ? null : reader.GetInt32("TuSo"),
+						DenSo = reader.IsDBNull("DenSo") ? null : reader.GetInt32("DenSo"),
+						DonGia = reader.GetDecimal("DonGia"),
+						TrangThai = reader.GetBoolean("TrangThai"),
+						IsDeleted = reader.GetBoolean("IsDeleted"),
+						NgayTao = reader.GetDateTime("NgayTao"),
+						NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+						NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+						NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+					};
+					return Ok(new { success = true, data = updatedPriceTier, message = "Cập nhật bậc giá thành công" });
+				}
+				return Ok(new { success = true, data = model, message = "Cập nhật bậc giá thành công" });
 			}
 			catch (Exception ex)
 			{
-				return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 
@@ -171,13 +198,57 @@ namespace KTX_Admin.Controllers
 
 				var rowsAffected = await command.ExecuteNonQueryAsync();
 				if (rowsAffected == 0)
-					return NotFound();
+					return NotFound(new { success = false, message = "Không tìm thấy bậc giá" });
 
-				return Ok();
+				return Ok(new { success = true, message = "Xóa bậc giá thành công" });
 			}
 			catch (Exception ex)
 			{
-				return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+			}
+		}
+
+		[HttpGet("by-type/{loai}")]
+		public async Task<IActionResult> GetByLoai(string loai)
+		{
+			try
+			{
+				using var connection = new SqlConnection(_connectionString);
+				await connection.OpenAsync();
+
+				using var command = new SqlCommand("sp_BacGia_GetByLoaiPhi", connection)
+				{
+					CommandType = CommandType.StoredProcedure
+				};
+				command.Parameters.AddWithValue("@Loai", loai);
+
+				using var reader = await command.ExecuteReaderAsync();
+				var priceTiers = new List<BacGia>();
+
+				while (await reader.ReadAsync())
+				{
+					priceTiers.Add(new BacGia
+					{
+						MaBac = reader.GetInt32("MaBac"),
+						Loai = reader.GetString("Loai"),
+						ThuTu = reader.GetInt32("ThuTu"),
+						TuSo = reader.IsDBNull("TuSo") ? null : reader.GetInt32("TuSo"),
+						DenSo = reader.IsDBNull("DenSo") ? null : reader.GetInt32("DenSo"),
+						DonGia = reader.GetDecimal("DonGia"),
+						TrangThai = reader.GetBoolean("TrangThai"),
+						IsDeleted = reader.GetBoolean("IsDeleted"),
+						NgayTao = reader.GetDateTime("NgayTao"),
+						NguoiTao = reader.IsDBNull("NguoiTao") ? null : reader.GetString("NguoiTao"),
+						NgayCapNhat = reader.IsDBNull("NgayCapNhat") ? (DateTime?)null : reader.GetDateTime("NgayCapNhat"),
+						NguoiCapNhat = reader.IsDBNull("NguoiCapNhat") ? null : reader.GetString("NguoiCapNhat")
+					});
+				}
+
+				return Ok(new { success = true, data = priceTiers });
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
 			}
 		}
 	}

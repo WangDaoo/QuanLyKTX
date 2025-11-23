@@ -1,4 +1,4 @@
-namespace KTX_NguoiDung.Models.Responses
+namespace KTX_Admin.Models.Responses
 {
     public sealed class DonDangKyResponse
     {
@@ -16,6 +16,8 @@ namespace KTX_NguoiDung.Models.Responses
         public string? NguoiCapNhat { get; set; }
         public string? TenSinhVien { get; set; }
         public string? MSSV { get; set; }
+        public string? Lop { get; set; }
+        public string? Khoa { get; set; }
         public string? PhongDeXuat { get; set; }
         public string? ToaNhaDeXuat { get; set; }
     }

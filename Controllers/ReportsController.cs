@@ -42,16 +42,16 @@ namespace KTX_Admin.Controllers
                     {
                         TenToaNha = reader.GetString("TenToaNha"),
                         TongSoPhong = reader.GetInt32("TongSoPhong"),
-                        SoPhongCoNguoi = reader.GetInt32("SoPhongCoNguoi"),
+                        SoPhongCoSinhVien = reader.GetInt32("SoPhongCoSinhVien"),
                         TyLeLapDay = reader.GetDecimal("TyLeLapDay")
                     });
                 }
 
-                return Ok(report);
+                return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -81,22 +81,21 @@ namespace KTX_Admin.Controllers
                         Nam = reader.GetInt32("Nam"),
                         TongSoHoaDon = reader.GetInt32("TongSoHoaDon"),
                         TongDoanhThu = reader.GetDecimal("TongDoanhThu"),
-                        DaThanhToan = reader.GetDecimal("DaThanhToan"),
-                        ChuaThanhToan = reader.GetDecimal("ChuaThanhToan"),
-                        QuaHan = reader.GetDecimal("QuaHan")
+                        DoanhThuDaThu = reader.GetDecimal("DoanhThuDaThu"),
+                        DoanhThuChuaThu = reader.GetDecimal("DoanhThuChuaThu")
                     });
                 }
 
-                return Ok(report);
+                return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
         [HttpGet("debt")]
-        public async Task<IActionResult> GetDebtReport([FromQuery] DateTime? ngayBaoCao = null)
+        public async Task<IActionResult> GetDebtReport([FromQuery] int? thang = null, [FromQuery] int? nam = null)
         {
             try
             {
@@ -107,7 +106,8 @@ namespace KTX_Admin.Controllers
                 {
                     CommandType = CommandType.StoredProcedure
                 };
-                command.Parameters.AddWithValue("@NgayBaoCao", ngayBaoCao ?? DateTime.Now);
+                if (thang.HasValue) command.Parameters.AddWithValue("@Thang", thang.Value); else command.Parameters.AddWithValue("@Thang", DBNull.Value);
+                if (nam.HasValue) command.Parameters.AddWithValue("@Nam", nam.Value); else command.Parameters.AddWithValue("@Nam", DBNull.Value);
 
                 using var reader = await command.ExecuteReaderAsync();
                 var report = new List<object>();
@@ -116,24 +116,23 @@ namespace KTX_Admin.Controllers
                 {
                     report.Add(new
                     {
-                        MSSV = reader.GetString("MSSV"),
+                        MaSinhVien = reader.GetInt32("MaSinhVien"),
                         HoTen = reader.GetString("HoTen"),
-                        SDT = reader.IsDBNull("SDT") ? null : reader.GetString("SDT"),
-                        Email = reader.IsDBNull("Email") ? null : reader.GetString("Email"),
+                        MSSV = reader.GetString("MSSV"),
+                        Lop = reader.IsDBNull("Lop") ? null : reader.GetString("Lop"),
+                        Khoa = reader.IsDBNull("Khoa") ? null : reader.GetString("Khoa"),
                         SoPhong = reader.IsDBNull("SoPhong") ? null : reader.GetString("SoPhong"),
                         TenToaNha = reader.IsDBNull("TenToaNha") ? null : reader.GetString("TenToaNha"),
-                        SoHoaDonChuaTra = reader.GetInt32("SoHoaDonChuaTra"),
-                        TongCongNo = reader.GetDecimal("TongCongNo"),
-                        HanThanhToanGanNhat = reader.GetDateTime("HanThanhToanGanNhat"),
-                        SoNgayQuaHan = reader.GetInt32("SoNgayQuaHan")
+                        SoHoaDonChuaThanhToan = reader.GetInt32("SoHoaDonChuaThanhToan"),
+                        TongCongNo = reader.GetDecimal("TongCongNo")
                     });
                 }
 
-                return Ok(report);
+                return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -160,23 +159,19 @@ namespace KTX_Admin.Controllers
                     report.Add(new
                     {
                         TenToaNha = reader.GetString("TenToaNha"),
-                        SoPhong = reader.GetString("SoPhong"),
-                        Thang = reader.GetInt32("Thang"),
-                        Nam = reader.GetInt32("Nam"),
-                        ChiSoDien = reader.GetInt32("ChiSoDien"),
-                        ChiSoNuoc = reader.GetInt32("ChiSoNuoc"),
-                        ChiSoDienTruoc = reader.IsDBNull("ChiSoDienTruoc") ? (int?)null : reader.GetInt32("ChiSoDienTruoc"),
-                        ChiSoNuocTruoc = reader.IsDBNull("ChiSoNuocTruoc") ? (int?)null : reader.GetInt32("ChiSoNuocTruoc"),
-                        SoKwhTieuThu = reader.IsDBNull("SoKwhTieuThu") ? (int?)null : reader.GetInt32("SoKwhTieuThu"),
-                        SoKhoiNuocTieuThu = reader.IsDBNull("SoKhoiNuocTieuThu") ? (int?)null : reader.GetInt32("SoKhoiNuocTieuThu")
+                        TongSoPhong = reader.GetInt32("TongSoPhong"),
+                        TongSoDien = reader.IsDBNull("TongSoDien") ? (int?)null : reader.GetInt32("TongSoDien"),
+                        TongSoNuoc = reader.IsDBNull("TongSoNuoc") ? (int?)null : reader.GetInt32("TongSoNuoc"),
+                        TrungBinhDien = reader.IsDBNull("TrungBinhDien") ? (decimal?)null : reader.GetDecimal("TrungBinhDien"),
+                        TrungBinhNuoc = reader.IsDBNull("TrungBinhNuoc") ? (decimal?)null : reader.GetDecimal("TrungBinhNuoc")
                     });
                 }
 
-                return Ok(report);
+                return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -214,11 +209,11 @@ namespace KTX_Admin.Controllers
                     });
                 }
 
-                return Ok(report);
+                return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
@@ -249,16 +244,16 @@ namespace KTX_Admin.Controllers
                     });
                 }
 
-                return Ok(result);
+                return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
         [HttpPost("calculate-electricity")]
-        public async Task<IActionResult> CalculateElectricity([FromQuery] int maPhong, [FromQuery] int thang, [FromQuery] int nam)
+        public async Task<IActionResult> CalculateElectricity([FromQuery] int soKwh, [FromQuery] int thang, [FromQuery] int nam)
         {
             try
             {
@@ -269,7 +264,7 @@ namespace KTX_Admin.Controllers
                 {
                     CommandType = CommandType.StoredProcedure
                 };
-                command.Parameters.AddWithValue("@MaPhong", maPhong);
+                command.Parameters.AddWithValue("@SoKwh", soKwh);
                 command.Parameters.AddWithValue("@Thang", thang);
                 command.Parameters.AddWithValue("@Nam", nam);
 
@@ -280,21 +275,20 @@ namespace KTX_Admin.Controllers
                 {
                     result.Add(new
                     {
-                        SoKwhTieuThu = reader.GetInt32("SoKwhTieuThu"),
                         TongTienDien = reader.GetDecimal("TongTienDien")
                     });
                 }
 
-                return Ok(result);
+                return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
 
         [HttpPost("calculate-water")]
-        public async Task<IActionResult> CalculateWater([FromQuery] int maPhong, [FromQuery] int thang, [FromQuery] int nam)
+        public async Task<IActionResult> CalculateWater([FromQuery] int soKhoi, [FromQuery] int thang, [FromQuery] int nam)
         {
             try
             {
@@ -305,7 +299,7 @@ namespace KTX_Admin.Controllers
                 {
                     CommandType = CommandType.StoredProcedure
                 };
-                command.Parameters.AddWithValue("@MaPhong", maPhong);
+                command.Parameters.AddWithValue("@SoKhoi", soKhoi);
                 command.Parameters.AddWithValue("@Thang", thang);
                 command.Parameters.AddWithValue("@Nam", nam);
 
@@ -316,16 +310,15 @@ namespace KTX_Admin.Controllers
                 {
                     result.Add(new
                     {
-                        SoKhoiNuocTieuThu = reader.GetInt32("SoKhoiNuocTieuThu"),
                         TongTienNuoc = reader.GetDecimal("TongTienNuoc")
                     });
                 }
 
-                return Ok(result);
+                return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Lỗi server: " + ex.Message });
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
         }
     }
